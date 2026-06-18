@@ -2,3 +2,5 @@
 
 # Source/scratch art — generated assets, not referenced by index.html and not deployed
 morphogenesis*
+# …except morphogenesis.webp — the plate renders it as the field background, so it ships.
+!morphogenesis.webp

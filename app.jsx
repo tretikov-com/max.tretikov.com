@@ -1,173 +1,304 @@
-/* TRK-01 — React mount of the hand-authored SVG art + relief-band animation.
-   The SVG is preserved verbatim (injected via dangerouslySetInnerHTML) so the
-   vector art stays pixel-identical; the band animation runs in a React effect
-   after mount — the same pattern site.jsx uses for its imperative WebGL canvas. */
-const { useEffect, useRef } = React;
+/* TRK-01 — adaptive engineering-drawing plate.
+   The scene is rebuilt parametrically from the live viewport size, so it fills
+   any aspect ratio without letterbox bars and without distorting the art:
+     • the signature diagonal wedge is mapped from a normalized facet
+       template onto the real viewport (left wedge in landscape, top band in
+       portrait);
+     • the title block, the blueprint field, and the registration marks in every
+       corner re-anchor to the actual edges;
+     • the relief band still animates imperatively in a React effect (the same
+       per-frame approach the fixed version used) so resizes stay cheap.
+   Landscape and portrait get distinct compositions. */
+const { useEffect, useMemo, useRef, useState } = React;
 
-const ART = `
-    <svg viewBox="0 0 1672 941" xmlns="http://www.w3.org/2000/svg">
-      <defs>
-        <linearGradient id="bg" x1="0" y1="1" x2="1" y2="0">
-          <stop offset="0" stop-color="#e7e7e6"/>
-          <stop offset="0.55" stop-color="#efeeed"/>
-          <stop offset="1" stop-color="#f7f6f6"/>
-        </linearGradient>
-        <linearGradient id="cds" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#dadada"/>
-          <stop offset="0.5" stop-color="#cccccc"/>
-          <stop offset="1" stop-color="#c0c0c0"/>
-        </linearGradient>
-        <radialGradient id="red" cx="0.38" cy="0.34" r="0.75">
-          <stop offset="0" stop-color="#d8503f"/>
-          <stop offset="0.6" stop-color="#c03828"/>
-          <stop offset="1" stop-color="#a82c1f"/>
-        </radialGradient>
-      </defs>
+const PAL = window.PALETTE;        // central palette — see palette.js
 
-      <!-- base panel -->
-      <rect x="0" y="0" width="1672" height="941" fill="url(#bg)"/>
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fx2 = (n) => n.toFixed(1);
 
-      <!-- dark purple left region -->
-      <clipPath id="navyclip"><path d="M0,0 L336,0 L169,170 L169,360 L293,520 L293,660 L411,800 L543,941 L0,941 Z"/></clipPath>
-      <path d="M0,0 L336,0 L169,170 L169,360 L293,520 L293,660 L411,800 L543,941 L0,941 Z" fill="#271b36"/>
+/* Normalized facets of the signature diagonal seam, thin waist → thick end.
+   fx = fraction of the wedge's width, fy = fraction along its long axis.
+   Derived from the original hand-authored TRK-01 wedge (widest facet = 1.0). */
+const FACETS = [
+  [0.62, 0.00], [0.31, 0.18], [0.31, 0.38],
+  [0.54, 0.55], [0.54, 0.70], [0.76, 0.85], [1.00, 1.00],
+];
 
-      <!-- blueprint detail confined to dark region -->
-      <g clip-path="url(#navyclip)">
-        <!-- nested panel outline with rounded corner near chamfer vertex -->
-        <path d="M214,86 q0,-14 14,-14 L300,72" fill="none" stroke="#52456a" stroke-width="1.2"/>
-        <path d="M214,86 L214,250" fill="none" stroke="#52456a" stroke-width="1.1"/>
-        <!-- sparse dotted grid -->
-        <g fill="#3f3553">
-          <circle cx="25" cy="110" r="0.7"/><circle cx="40" cy="110" r="0.7"/><circle cx="55" cy="110" r="0.7"/><circle cx="70" cy="110" r="0.7"/><circle cx="85" cy="110" r="0.7"/><circle cx="100" cy="110" r="0.7"/><circle cx="115" cy="110" r="0.7"/><circle cx="130" cy="110" r="0.7"/><circle cx="145" cy="110" r="0.7"/><circle cx="160" cy="110" r="0.7"/><circle cx="175" cy="110" r="0.7"/><circle cx="190" cy="110" r="0.7"/><circle cx="205" cy="110" r="0.7"/><circle cx="220" cy="110" r="0.7"/><circle cx="235" cy="110" r="0.7"/><circle cx="250" cy="110" r="0.7"/><circle cx="265" cy="110" r="0.7"/><circle cx="280" cy="110" r="0.7"/><circle cx="295" cy="110" r="0.7"/><circle cx="310" cy="110" r="0.7"/><circle cx="325" cy="110" r="0.7"/><circle cx="340" cy="110" r="0.7"/><circle cx="355" cy="110" r="0.7"/><circle cx="370" cy="110" r="0.7"/><circle cx="385" cy="110" r="0.7"/><circle cx="400" cy="110" r="0.7"/><circle cx="25" cy="125" r="0.7"/><circle cx="40" cy="125" r="0.7"/><circle cx="55" cy="125" r="0.7"/><circle cx="70" cy="125" r="0.7"/><circle cx="85" cy="125" r="0.7"/><circle cx="100" cy="125" r="0.7"/><circle cx="115" cy="125" r="0.7"/><circle cx="130" cy="125" r="0.7"/><circle cx="145" cy="125" r="0.7"/><circle cx="160" cy="125" r="0.7"/><circle cx="175" cy="125" r="0.7"/><circle cx="190" cy="125" r="0.7"/><circle cx="205" cy="125" r="0.7"/><circle cx="220" cy="125" r="0.7"/><circle cx="235" cy="125" r="0.7"/><circle cx="250" cy="125" r="0.7"/><circle cx="265" cy="125" r="0.7"/><circle cx="280" cy="125" r="0.7"/><circle cx="295" cy="125" r="0.7"/><circle cx="310" cy="125" r="0.7"/><circle cx="325" cy="125" r="0.7"/><circle cx="340" cy="125" r="0.7"/><circle cx="355" cy="125" r="0.7"/><circle cx="370" cy="125" r="0.7"/><circle cx="385" cy="125" r="0.7"/><circle cx="400" cy="125" r="0.7"/><circle cx="25" cy="140" r="0.7"/><circle cx="40" cy="140" r="0.7"/><circle cx="55" cy="140" r="0.7"/><circle cx="70" cy="140" r="0.7"/><circle cx="85" cy="140" r="0.7"/><circle cx="100" cy="140" r="0.7"/><circle cx="115" cy="140" r="0.7"/><circle cx="130" cy="140" r="0.7"/><circle cx="145" cy="140" r="0.7"/><circle cx="160" cy="140" r="0.7"/><circle cx="175" cy="140" r="0.7"/><circle cx="190" cy="140" r="0.7"/><circle cx="205" cy="140" r="0.7"/><circle cx="220" cy="140" r="0.7"/><circle cx="235" cy="140" r="0.7"/><circle cx="250" cy="140" r="0.7"/><circle cx="265" cy="140" r="0.7"/><circle cx="280" cy="140" r="0.7"/><circle cx="295" cy="140" r="0.7"/><circle cx="310" cy="140" r="0.7"/><circle cx="325" cy="140" r="0.7"/><circle cx="340" cy="140" r="0.7"/><circle cx="355" cy="140" r="0.7"/><circle cx="370" cy="140" r="0.7"/><circle cx="385" cy="140" r="0.7"/><circle cx="400" cy="140" r="0.7"/><circle cx="25" cy="155" r="0.7"/><circle cx="40" cy="155" r="0.7"/><circle cx="55" cy="155" r="0.7"/><circle cx="70" cy="155" r="0.7"/><circle cx="85" cy="155" r="0.7"/><circle cx="100" cy="155" r="0.7"/><circle cx="115" cy="155" r="0.7"/><circle cx="130" cy="155" r="0.7"/><circle cx="145" cy="155" r="0.7"/><circle cx="160" cy="155" r="0.7"/><circle cx="175" cy="155" r="0.7"/><circle cx="190" cy="155" r="0.7"/><circle cx="205" cy="155" r="0.7"/><circle cx="220" cy="155" r="0.7"/><circle cx="235" cy="155" r="0.7"/><circle cx="250" cy="155" r="0.7"/><circle cx="265" cy="155" r="0.7"/><circle cx="280" cy="155" r="0.7"/><circle cx="295" cy="155" r="0.7"/><circle cx="310" cy="155" r="0.7"/><circle cx="325" cy="155" r="0.7"/><circle cx="340" cy="155" r="0.7"/><circle cx="355" cy="155" r="0.7"/><circle cx="370" cy="155" r="0.7"/><circle cx="385" cy="155" r="0.7"/><circle cx="400" cy="155" r="0.7"/><circle cx="25" cy="170" r="0.7"/><circle cx="40" cy="170" r="0.7"/><circle cx="55" cy="170" r="0.7"/><circle cx="70" cy="170" r="0.7"/><circle cx="85" cy="170" r="0.7"/><circle cx="100" cy="170" r="0.7"/><circle cx="115" cy="170" r="0.7"/><circle cx="130" cy="170" r="0.7"/><circle cx="145" cy="170" r="0.7"/><circle cx="160" cy="170" r="0.7"/><circle cx="175" cy="170" r="0.7"/><circle cx="190" cy="170" r="0.7"/><circle cx="205" cy="170" r="0.7"/><circle cx="220" cy="170" r="0.7"/><circle cx="235" cy="170" r="0.7"/><circle cx="250" cy="170" r="0.7"/><circle cx="265" cy="170" r="0.7"/><circle cx="280" cy="170" r="0.7"/><circle cx="295" cy="170" r="0.7"/><circle cx="310" cy="170" r="0.7"/><circle cx="325" cy="170" r="0.7"/><circle cx="340" cy="170" r="0.7"/><circle cx="355" cy="170" r="0.7"/><circle cx="370" cy="170" r="0.7"/><circle cx="385" cy="170" r="0.7"/><circle cx="400" cy="170" r="0.7"/><circle cx="25" cy="185" r="0.7"/><circle cx="40" cy="185" r="0.7"/><circle cx="55" cy="185" r="0.7"/><circle cx="70" cy="185" r="0.7"/><circle cx="85" cy="185" r="0.7"/><circle cx="100" cy="185" r="0.7"/><circle cx="115" cy="185" r="0.7"/><circle cx="130" cy="185" r="0.7"/><circle cx="145" cy="185" r="0.7"/><circle cx="160" cy="185" r="0.7"/><circle cx="175" cy="185" r="0.7"/><circle cx="190" cy="185" r="0.7"/><circle cx="205" cy="185" r="0.7"/><circle cx="220" cy="185" r="0.7"/><circle cx="235" cy="185" r="0.7"/><circle cx="250" cy="185" r="0.7"/><circle cx="265" cy="185" r="0.7"/><circle cx="280" cy="185" r="0.7"/><circle cx="295" cy="185" r="0.7"/><circle cx="310" cy="185" r="0.7"/><circle cx="325" cy="185" r="0.7"/><circle cx="340" cy="185" r="0.7"/><circle cx="355" cy="185" r="0.7"/><circle cx="370" cy="185" r="0.7"/><circle cx="385" cy="185" r="0.7"/><circle cx="400" cy="185" r="0.7"/><circle cx="25" cy="200" r="0.7"/><circle cx="40" cy="200" r="0.7"/><circle cx="55" cy="200" r="0.7"/><circle cx="70" cy="200" r="0.7"/><circle cx="85" cy="200" r="0.7"/><circle cx="100" cy="200" r="0.7"/><circle cx="115" cy="200" r="0.7"/><circle cx="130" cy="200" r="0.7"/><circle cx="145" cy="200" r="0.7"/><circle cx="160" cy="200" r="0.7"/><circle cx="175" cy="200" r="0.7"/><circle cx="190" cy="200" r="0.7"/><circle cx="205" cy="200" r="0.7"/><circle cx="220" cy="200" r="0.7"/><circle cx="235" cy="200" r="0.7"/><circle cx="250" cy="200" r="0.7"/><circle cx="265" cy="200" r="0.7"/><circle cx="280" cy="200" r="0.7"/><circle cx="295" cy="200" r="0.7"/><circle cx="310" cy="200" r="0.7"/><circle cx="325" cy="200" r="0.7"/><circle cx="340" cy="200" r="0.7"/><circle cx="355" cy="200" r="0.7"/><circle cx="370" cy="200" r="0.7"/><circle cx="385" cy="200" r="0.7"/><circle cx="400" cy="200" r="0.7"/><circle cx="25" cy="215" r="0.7"/><circle cx="40" cy="215" r="0.7"/><circle cx="55" cy="215" r="0.7"/><circle cx="70" cy="215" r="0.7"/><circle cx="85" cy="215" r="0.7"/><circle cx="100" cy="215" r="0.7"/><circle cx="115" cy="215" r="0.7"/><circle cx="130" cy="215" r="0.7"/><circle cx="145" cy="215" r="0.7"/><circle cx="160" cy="215" r="0.7"/><circle cx="175" cy="215" r="0.7"/><circle cx="190" cy="215" r="0.7"/><circle cx="205" cy="215" r="0.7"/><circle cx="220" cy="215" r="0.7"/><circle cx="235" cy="215" r="0.7"/><circle cx="250" cy="215" r="0.7"/><circle cx="265" cy="215" r="0.7"/><circle cx="280" cy="215" r="0.7"/><circle cx="295" cy="215" r="0.7"/><circle cx="310" cy="215" r="0.7"/><circle cx="325" cy="215" r="0.7"/><circle cx="340" cy="215" r="0.7"/><circle cx="355" cy="215" r="0.7"/><circle cx="370" cy="215" r="0.7"/><circle cx="385" cy="215" r="0.7"/><circle cx="400" cy="215" r="0.7"/><circle cx="25" cy="230" r="0.7"/><circle cx="40" cy="230" r="0.7"/><circle cx="55" cy="230" r="0.7"/><circle cx="70" cy="230" r="0.7"/><circle cx="85" cy="230" r="0.7"/><circle cx="100" cy="230" r="0.7"/><circle cx="115" cy="230" r="0.7"/><circle cx="130" cy="230" r="0.7"/><circle cx="145" cy="230" r="0.7"/><circle cx="160" cy="230" r="0.7"/><circle cx="175" cy="230" r="0.7"/><circle cx="190" cy="230" r="0.7"/><circle cx="205" cy="230" r="0.7"/><circle cx="220" cy="230" r="0.7"/><circle cx="235" cy="230" r="0.7"/><circle cx="250" cy="230" r="0.7"/><circle cx="265" cy="230" r="0.7"/><circle cx="280" cy="230" r="0.7"/><circle cx="295" cy="230" r="0.7"/><circle cx="310" cy="230" r="0.7"/><circle cx="325" cy="230" r="0.7"/><circle cx="340" cy="230" r="0.7"/><circle cx="355" cy="230" r="0.7"/><circle cx="370" cy="230" r="0.7"/><circle cx="385" cy="230" r="0.7"/><circle cx="400" cy="230" r="0.7"/><circle cx="25" cy="245" r="0.7"/><circle cx="40" cy="245" r="0.7"/><circle cx="55" cy="245" r="0.7"/><circle cx="70" cy="245" r="0.7"/><circle cx="85" cy="245" r="0.7"/><circle cx="100" cy="245" r="0.7"/><circle cx="115" cy="245" r="0.7"/><circle cx="130" cy="245" r="0.7"/><circle cx="145" cy="245" r="0.7"/><circle cx="160" cy="245" r="0.7"/><circle cx="175" cy="245" r="0.7"/><circle cx="190" cy="245" r="0.7"/><circle cx="205" cy="245" r="0.7"/><circle cx="220" cy="245" r="0.7"/><circle cx="235" cy="245" r="0.7"/><circle cx="250" cy="245" r="0.7"/><circle cx="265" cy="245" r="0.7"/><circle cx="280" cy="245" r="0.7"/><circle cx="295" cy="245" r="0.7"/><circle cx="310" cy="245" r="0.7"/><circle cx="325" cy="245" r="0.7"/><circle cx="340" cy="245" r="0.7"/><circle cx="355" cy="245" r="0.7"/><circle cx="370" cy="245" r="0.7"/><circle cx="385" cy="245" r="0.7"/><circle cx="400" cy="245" r="0.7"/><circle cx="25" cy="260" r="0.7"/><circle cx="40" cy="260" r="0.7"/><circle cx="55" cy="260" r="0.7"/><circle cx="70" cy="260" r="0.7"/><circle cx="85" cy="260" r="0.7"/><circle cx="100" cy="260" r="0.7"/><circle cx="115" cy="260" r="0.7"/><circle cx="130" cy="260" r="0.7"/><circle cx="145" cy="260" r="0.7"/><circle cx="160" cy="260" r="0.7"/><circle cx="175" cy="260" r="0.7"/><circle cx="190" cy="260" r="0.7"/><circle cx="205" cy="260" r="0.7"/><circle cx="220" cy="260" r="0.7"/><circle cx="235" cy="260" r="0.7"/><circle cx="250" cy="260" r="0.7"/><circle cx="265" cy="260" r="0.7"/><circle cx="280" cy="260" r="0.7"/><circle cx="295" cy="260" r="0.7"/><circle cx="310" cy="260" r="0.7"/><circle cx="325" cy="260" r="0.7"/><circle cx="340" cy="260" r="0.7"/><circle cx="355" cy="260" r="0.7"/><circle cx="370" cy="260" r="0.7"/><circle cx="385" cy="260" r="0.7"/><circle cx="400" cy="260" r="0.7"/><circle cx="25" cy="275" r="0.7"/><circle cx="40" cy="275" r="0.7"/><circle cx="55" cy="275" r="0.7"/><circle cx="70" cy="275" r="0.7"/><circle cx="85" cy="275" r="0.7"/><circle cx="100" cy="275" r="0.7"/><circle cx="115" cy="275" r="0.7"/><circle cx="130" cy="275" r="0.7"/><circle cx="145" cy="275" r="0.7"/><circle cx="160" cy="275" r="0.7"/><circle cx="175" cy="275" r="0.7"/><circle cx="190" cy="275" r="0.7"/><circle cx="205" cy="275" r="0.7"/><circle cx="220" cy="275" r="0.7"/><circle cx="235" cy="275" r="0.7"/><circle cx="250" cy="275" r="0.7"/><circle cx="265" cy="275" r="0.7"/><circle cx="280" cy="275" r="0.7"/><circle cx="295" cy="275" r="0.7"/><circle cx="310" cy="275" r="0.7"/><circle cx="325" cy="275" r="0.7"/><circle cx="340" cy="275" r="0.7"/><circle cx="355" cy="275" r="0.7"/><circle cx="370" cy="275" r="0.7"/><circle cx="385" cy="275" r="0.7"/><circle cx="400" cy="275" r="0.7"/><circle cx="25" cy="290" r="0.7"/><circle cx="40" cy="290" r="0.7"/><circle cx="55" cy="290" r="0.7"/><circle cx="70" cy="290" r="0.7"/><circle cx="85" cy="290" r="0.7"/><circle cx="100" cy="290" r="0.7"/><circle cx="115" cy="290" r="0.7"/><circle cx="130" cy="290" r="0.7"/><circle cx="145" cy="290" r="0.7"/><circle cx="160" cy="290" r="0.7"/><circle cx="175" cy="290" r="0.7"/><circle cx="190" cy="290" r="0.7"/><circle cx="205" cy="290" r="0.7"/><circle cx="220" cy="290" r="0.7"/><circle cx="235" cy="290" r="0.7"/><circle cx="250" cy="290" r="0.7"/><circle cx="265" cy="290" r="0.7"/><circle cx="280" cy="290" r="0.7"/><circle cx="295" cy="290" r="0.7"/><circle cx="310" cy="290" r="0.7"/><circle cx="325" cy="290" r="0.7"/><circle cx="340" cy="290" r="0.7"/><circle cx="355" cy="290" r="0.7"/><circle cx="370" cy="290" r="0.7"/><circle cx="385" cy="290" r="0.7"/><circle cx="400" cy="290" r="0.7"/><circle cx="25" cy="305" r="0.7"/><circle cx="40" cy="305" r="0.7"/><circle cx="55" cy="305" r="0.7"/><circle cx="70" cy="305" r="0.7"/><circle cx="85" cy="305" r="0.7"/><circle cx="100" cy="305" r="0.7"/><circle cx="115" cy="305" r="0.7"/><circle cx="130" cy="305" r="0.7"/><circle cx="145" cy="305" r="0.7"/><circle cx="160" cy="305" r="0.7"/><circle cx="175" cy="305" r="0.7"/><circle cx="190" cy="305" r="0.7"/><circle cx="205" cy="305" r="0.7"/><circle cx="220" cy="305" r="0.7"/><circle cx="235" cy="305" r="0.7"/><circle cx="250" cy="305" r="0.7"/><circle cx="265" cy="305" r="0.7"/><circle cx="280" cy="305" r="0.7"/><circle cx="295" cy="305" r="0.7"/><circle cx="310" cy="305" r="0.7"/><circle cx="325" cy="305" r="0.7"/><circle cx="340" cy="305" r="0.7"/><circle cx="355" cy="305" r="0.7"/><circle cx="370" cy="305" r="0.7"/><circle cx="385" cy="305" r="0.7"/><circle cx="400" cy="305" r="0.7"/><circle cx="25" cy="320" r="0.7"/><circle cx="40" cy="320" r="0.7"/><circle cx="55" cy="320" r="0.7"/><circle cx="70" cy="320" r="0.7"/><circle cx="85" cy="320" r="0.7"/><circle cx="100" cy="320" r="0.7"/><circle cx="115" cy="320" r="0.7"/><circle cx="130" cy="320" r="0.7"/><circle cx="145" cy="320" r="0.7"/><circle cx="160" cy="320" r="0.7"/><circle cx="175" cy="320" r="0.7"/><circle cx="190" cy="320" r="0.7"/><circle cx="205" cy="320" r="0.7"/><circle cx="220" cy="320" r="0.7"/><circle cx="235" cy="320" r="0.7"/><circle cx="250" cy="320" r="0.7"/><circle cx="265" cy="320" r="0.7"/><circle cx="280" cy="320" r="0.7"/><circle cx="295" cy="320" r="0.7"/><circle cx="310" cy="320" r="0.7"/><circle cx="325" cy="320" r="0.7"/><circle cx="340" cy="320" r="0.7"/><circle cx="355" cy="320" r="0.7"/><circle cx="370" cy="320" r="0.7"/><circle cx="385" cy="320" r="0.7"/><circle cx="400" cy="320" r="0.7"/><circle cx="25" cy="335" r="0.7"/><circle cx="40" cy="335" r="0.7"/><circle cx="55" cy="335" r="0.7"/><circle cx="70" cy="335" r="0.7"/><circle cx="85" cy="335" r="0.7"/><circle cx="100" cy="335" r="0.7"/><circle cx="115" cy="335" r="0.7"/><circle cx="130" cy="335" r="0.7"/><circle cx="145" cy="335" r="0.7"/><circle cx="160" cy="335" r="0.7"/><circle cx="175" cy="335" r="0.7"/><circle cx="190" cy="335" r="0.7"/><circle cx="205" cy="335" r="0.7"/><circle cx="220" cy="335" r="0.7"/><circle cx="235" cy="335" r="0.7"/><circle cx="250" cy="335" r="0.7"/><circle cx="265" cy="335" r="0.7"/><circle cx="280" cy="335" r="0.7"/><circle cx="295" cy="335" r="0.7"/><circle cx="310" cy="335" r="0.7"/><circle cx="325" cy="335" r="0.7"/><circle cx="340" cy="335" r="0.7"/><circle cx="355" cy="335" r="0.7"/><circle cx="370" cy="335" r="0.7"/><circle cx="385" cy="335" r="0.7"/><circle cx="400" cy="335" r="0.7"/><circle cx="25" cy="350" r="0.7"/><circle cx="40" cy="350" r="0.7"/><circle cx="55" cy="350" r="0.7"/><circle cx="70" cy="350" r="0.7"/><circle cx="85" cy="350" r="0.7"/><circle cx="100" cy="350" r="0.7"/><circle cx="115" cy="350" r="0.7"/><circle cx="130" cy="350" r="0.7"/><circle cx="145" cy="350" r="0.7"/><circle cx="160" cy="350" r="0.7"/><circle cx="175" cy="350" r="0.7"/><circle cx="190" cy="350" r="0.7"/><circle cx="205" cy="350" r="0.7"/><circle cx="220" cy="350" r="0.7"/><circle cx="235" cy="350" r="0.7"/><circle cx="250" cy="350" r="0.7"/><circle cx="265" cy="350" r="0.7"/><circle cx="280" cy="350" r="0.7"/><circle cx="295" cy="350" r="0.7"/><circle cx="310" cy="350" r="0.7"/><circle cx="325" cy="350" r="0.7"/><circle cx="340" cy="350" r="0.7"/><circle cx="355" cy="350" r="0.7"/><circle cx="370" cy="350" r="0.7"/><circle cx="385" cy="350" r="0.7"/><circle cx="400" cy="350" r="0.7"/><circle cx="25" cy="365" r="0.7"/><circle cx="40" cy="365" r="0.7"/><circle cx="55" cy="365" r="0.7"/><circle cx="70" cy="365" r="0.7"/><circle cx="85" cy="365" r="0.7"/><circle cx="100" cy="365" r="0.7"/><circle cx="115" cy="365" r="0.7"/><circle cx="130" cy="365" r="0.7"/><circle cx="145" cy="365" r="0.7"/><circle cx="160" cy="365" r="0.7"/><circle cx="175" cy="365" r="0.7"/><circle cx="190" cy="365" r="0.7"/><circle cx="205" cy="365" r="0.7"/><circle cx="220" cy="365" r="0.7"/><circle cx="235" cy="365" r="0.7"/><circle cx="250" cy="365" r="0.7"/><circle cx="265" cy="365" r="0.7"/><circle cx="280" cy="365" r="0.7"/><circle cx="295" cy="365" r="0.7"/><circle cx="310" cy="365" r="0.7"/><circle cx="325" cy="365" r="0.7"/><circle cx="340" cy="365" r="0.7"/><circle cx="355" cy="365" r="0.7"/><circle cx="370" cy="365" r="0.7"/><circle cx="385" cy="365" r="0.7"/><circle cx="400" cy="365" r="0.7"/><circle cx="25" cy="380" r="0.7"/><circle cx="40" cy="380" r="0.7"/><circle cx="55" cy="380" r="0.7"/><circle cx="70" cy="380" r="0.7"/><circle cx="85" cy="380" r="0.7"/><circle cx="100" cy="380" r="0.7"/><circle cx="115" cy="380" r="0.7"/><circle cx="130" cy="380" r="0.7"/><circle cx="145" cy="380" r="0.7"/><circle cx="160" cy="380" r="0.7"/><circle cx="175" cy="380" r="0.7"/><circle cx="190" cy="380" r="0.7"/><circle cx="205" cy="380" r="0.7"/><circle cx="220" cy="380" r="0.7"/><circle cx="235" cy="380" r="0.7"/><circle cx="250" cy="380" r="0.7"/><circle cx="265" cy="380" r="0.7"/><circle cx="280" cy="380" r="0.7"/><circle cx="295" cy="380" r="0.7"/><circle cx="310" cy="380" r="0.7"/><circle cx="325" cy="380" r="0.7"/><circle cx="340" cy="380" r="0.7"/><circle cx="355" cy="380" r="0.7"/><circle cx="370" cy="380" r="0.7"/><circle cx="385" cy="380" r="0.7"/><circle cx="400" cy="380" r="0.7"/><circle cx="25" cy="395" r="0.7"/><circle cx="40" cy="395" r="0.7"/><circle cx="55" cy="395" r="0.7"/><circle cx="70" cy="395" r="0.7"/><circle cx="85" cy="395" r="0.7"/><circle cx="100" cy="395" r="0.7"/><circle cx="115" cy="395" r="0.7"/><circle cx="130" cy="395" r="0.7"/><circle cx="145" cy="395" r="0.7"/><circle cx="160" cy="395" r="0.7"/><circle cx="175" cy="395" r="0.7"/><circle cx="190" cy="395" r="0.7"/><circle cx="205" cy="395" r="0.7"/><circle cx="220" cy="395" r="0.7"/><circle cx="235" cy="395" r="0.7"/><circle cx="250" cy="395" r="0.7"/><circle cx="265" cy="395" r="0.7"/><circle cx="280" cy="395" r="0.7"/><circle cx="295" cy="395" r="0.7"/><circle cx="310" cy="395" r="0.7"/><circle cx="325" cy="395" r="0.7"/><circle cx="340" cy="395" r="0.7"/><circle cx="355" cy="395" r="0.7"/><circle cx="370" cy="395" r="0.7"/><circle cx="385" cy="395" r="0.7"/><circle cx="400" cy="395" r="0.7"/><circle cx="25" cy="410" r="0.7"/><circle cx="40" cy="410" r="0.7"/><circle cx="55" cy="410" r="0.7"/><circle cx="70" cy="410" r="0.7"/><circle cx="85" cy="410" r="0.7"/><circle cx="100" cy="410" r="0.7"/><circle cx="115" cy="410" r="0.7"/><circle cx="130" cy="410" r="0.7"/><circle cx="145" cy="410" r="0.7"/><circle cx="160" cy="410" r="0.7"/><circle cx="175" cy="410" r="0.7"/><circle cx="190" cy="410" r="0.7"/><circle cx="205" cy="410" r="0.7"/><circle cx="220" cy="410" r="0.7"/><circle cx="235" cy="410" r="0.7"/><circle cx="250" cy="410" r="0.7"/><circle cx="265" cy="410" r="0.7"/><circle cx="280" cy="410" r="0.7"/><circle cx="295" cy="410" r="0.7"/><circle cx="310" cy="410" r="0.7"/><circle cx="325" cy="410" r="0.7"/><circle cx="340" cy="410" r="0.7"/><circle cx="355" cy="410" r="0.7"/><circle cx="370" cy="410" r="0.7"/><circle cx="385" cy="410" r="0.7"/><circle cx="400" cy="410" r="0.7"/><circle cx="25" cy="425" r="0.7"/><circle cx="40" cy="425" r="0.7"/><circle cx="55" cy="425" r="0.7"/><circle cx="70" cy="425" r="0.7"/><circle cx="85" cy="425" r="0.7"/><circle cx="100" cy="425" r="0.7"/><circle cx="115" cy="425" r="0.7"/><circle cx="130" cy="425" r="0.7"/><circle cx="145" cy="425" r="0.7"/><circle cx="160" cy="425" r="0.7"/><circle cx="175" cy="425" r="0.7"/><circle cx="190" cy="425" r="0.7"/><circle cx="205" cy="425" r="0.7"/><circle cx="220" cy="425" r="0.7"/><circle cx="235" cy="425" r="0.7"/><circle cx="250" cy="425" r="0.7"/><circle cx="265" cy="425" r="0.7"/><circle cx="280" cy="425" r="0.7"/><circle cx="295" cy="425" r="0.7"/><circle cx="310" cy="425" r="0.7"/><circle cx="325" cy="425" r="0.7"/><circle cx="340" cy="425" r="0.7"/><circle cx="355" cy="425" r="0.7"/><circle cx="370" cy="425" r="0.7"/><circle cx="385" cy="425" r="0.7"/><circle cx="400" cy="425" r="0.7"/><circle cx="25" cy="440" r="0.7"/><circle cx="40" cy="440" r="0.7"/><circle cx="55" cy="440" r="0.7"/><circle cx="70" cy="440" r="0.7"/><circle cx="85" cy="440" r="0.7"/><circle cx="100" cy="440" r="0.7"/><circle cx="115" cy="440" r="0.7"/><circle cx="130" cy="440" r="0.7"/><circle cx="145" cy="440" r="0.7"/><circle cx="160" cy="440" r="0.7"/><circle cx="175" cy="440" r="0.7"/><circle cx="190" cy="440" r="0.7"/><circle cx="205" cy="440" r="0.7"/><circle cx="220" cy="440" r="0.7"/><circle cx="235" cy="440" r="0.7"/><circle cx="250" cy="440" r="0.7"/><circle cx="265" cy="440" r="0.7"/><circle cx="280" cy="440" r="0.7"/><circle cx="295" cy="440" r="0.7"/><circle cx="310" cy="440" r="0.7"/><circle cx="325" cy="440" r="0.7"/><circle cx="340" cy="440" r="0.7"/><circle cx="355" cy="440" r="0.7"/><circle cx="370" cy="440" r="0.7"/><circle cx="385" cy="440" r="0.7"/><circle cx="400" cy="440" r="0.7"/><circle cx="25" cy="455" r="0.7"/><circle cx="40" cy="455" r="0.7"/><circle cx="55" cy="455" r="0.7"/><circle cx="70" cy="455" r="0.7"/><circle cx="85" cy="455" r="0.7"/><circle cx="100" cy="455" r="0.7"/><circle cx="115" cy="455" r="0.7"/><circle cx="130" cy="455" r="0.7"/><circle cx="145" cy="455" r="0.7"/><circle cx="160" cy="455" r="0.7"/><circle cx="175" cy="455" r="0.7"/><circle cx="190" cy="455" r="0.7"/><circle cx="205" cy="455" r="0.7"/><circle cx="220" cy="455" r="0.7"/><circle cx="235" cy="455" r="0.7"/><circle cx="250" cy="455" r="0.7"/><circle cx="265" cy="455" r="0.7"/><circle cx="280" cy="455" r="0.7"/><circle cx="295" cy="455" r="0.7"/><circle cx="310" cy="455" r="0.7"/><circle cx="325" cy="455" r="0.7"/><circle cx="340" cy="455" r="0.7"/><circle cx="355" cy="455" r="0.7"/><circle cx="370" cy="455" r="0.7"/><circle cx="385" cy="455" r="0.7"/><circle cx="400" cy="455" r="0.7"/><circle cx="25" cy="470" r="0.7"/><circle cx="40" cy="470" r="0.7"/><circle cx="55" cy="470" r="0.7"/><circle cx="70" cy="470" r="0.7"/><circle cx="85" cy="470" r="0.7"/><circle cx="100" cy="470" r="0.7"/><circle cx="115" cy="470" r="0.7"/><circle cx="130" cy="470" r="0.7"/><circle cx="145" cy="470" r="0.7"/><circle cx="160" cy="470" r="0.7"/><circle cx="175" cy="470" r="0.7"/><circle cx="190" cy="470" r="0.7"/><circle cx="205" cy="470" r="0.7"/><circle cx="220" cy="470" r="0.7"/><circle cx="235" cy="470" r="0.7"/><circle cx="250" cy="470" r="0.7"/><circle cx="265" cy="470" r="0.7"/><circle cx="280" cy="470" r="0.7"/><circle cx="295" cy="470" r="0.7"/><circle cx="310" cy="470" r="0.7"/><circle cx="325" cy="470" r="0.7"/><circle cx="340" cy="470" r="0.7"/><circle cx="355" cy="470" r="0.7"/><circle cx="370" cy="470" r="0.7"/><circle cx="385" cy="470" r="0.7"/><circle cx="400" cy="470" r="0.7"/><circle cx="25" cy="485" r="0.7"/><circle cx="40" cy="485" r="0.7"/><circle cx="55" cy="485" r="0.7"/><circle cx="70" cy="485" r="0.7"/><circle cx="85" cy="485" r="0.7"/><circle cx="100" cy="485" r="0.7"/><circle cx="115" cy="485" r="0.7"/><circle cx="130" cy="485" r="0.7"/><circle cx="145" cy="485" r="0.7"/><circle cx="160" cy="485" r="0.7"/><circle cx="175" cy="485" r="0.7"/><circle cx="190" cy="485" r="0.7"/><circle cx="205" cy="485" r="0.7"/><circle cx="220" cy="485" r="0.7"/><circle cx="235" cy="485" r="0.7"/><circle cx="250" cy="485" r="0.7"/><circle cx="265" cy="485" r="0.7"/><circle cx="280" cy="485" r="0.7"/><circle cx="295" cy="485" r="0.7"/><circle cx="310" cy="485" r="0.7"/><circle cx="325" cy="485" r="0.7"/><circle cx="340" cy="485" r="0.7"/><circle cx="355" cy="485" r="0.7"/><circle cx="370" cy="485" r="0.7"/><circle cx="385" cy="485" r="0.7"/><circle cx="400" cy="485" r="0.7"/><circle cx="25" cy="500" r="0.7"/><circle cx="40" cy="500" r="0.7"/><circle cx="55" cy="500" r="0.7"/><circle cx="70" cy="500" r="0.7"/><circle cx="85" cy="500" r="0.7"/><circle cx="100" cy="500" r="0.7"/><circle cx="115" cy="500" r="0.7"/><circle cx="130" cy="500" r="0.7"/><circle cx="145" cy="500" r="0.7"/><circle cx="160" cy="500" r="0.7"/><circle cx="175" cy="500" r="0.7"/><circle cx="190" cy="500" r="0.7"/><circle cx="205" cy="500" r="0.7"/><circle cx="220" cy="500" r="0.7"/><circle cx="235" cy="500" r="0.7"/><circle cx="250" cy="500" r="0.7"/><circle cx="265" cy="500" r="0.7"/><circle cx="280" cy="500" r="0.7"/><circle cx="295" cy="500" r="0.7"/><circle cx="310" cy="500" r="0.7"/><circle cx="325" cy="500" r="0.7"/><circle cx="340" cy="500" r="0.7"/><circle cx="355" cy="500" r="0.7"/><circle cx="370" cy="500" r="0.7"/><circle cx="385" cy="500" r="0.7"/><circle cx="400" cy="500" r="0.7"/><circle cx="25" cy="515" r="0.7"/><circle cx="40" cy="515" r="0.7"/><circle cx="55" cy="515" r="0.7"/><circle cx="70" cy="515" r="0.7"/><circle cx="85" cy="515" r="0.7"/><circle cx="100" cy="515" r="0.7"/><circle cx="115" cy="515" r="0.7"/><circle cx="130" cy="515" r="0.7"/><circle cx="145" cy="515" r="0.7"/><circle cx="160" cy="515" r="0.7"/><circle cx="175" cy="515" r="0.7"/><circle cx="190" cy="515" r="0.7"/><circle cx="205" cy="515" r="0.7"/><circle cx="220" cy="515" r="0.7"/><circle cx="235" cy="515" r="0.7"/><circle cx="250" cy="515" r="0.7"/><circle cx="265" cy="515" r="0.7"/><circle cx="280" cy="515" r="0.7"/><circle cx="295" cy="515" r="0.7"/><circle cx="310" cy="515" r="0.7"/><circle cx="325" cy="515" r="0.7"/><circle cx="340" cy="515" r="0.7"/><circle cx="355" cy="515" r="0.7"/><circle cx="370" cy="515" r="0.7"/><circle cx="385" cy="515" r="0.7"/><circle cx="400" cy="515" r="0.7"/><circle cx="25" cy="530" r="0.7"/><circle cx="40" cy="530" r="0.7"/><circle cx="55" cy="530" r="0.7"/><circle cx="70" cy="530" r="0.7"/><circle cx="85" cy="530" r="0.7"/><circle cx="100" cy="530" r="0.7"/><circle cx="115" cy="530" r="0.7"/><circle cx="130" cy="530" r="0.7"/><circle cx="145" cy="530" r="0.7"/><circle cx="160" cy="530" r="0.7"/><circle cx="175" cy="530" r="0.7"/><circle cx="190" cy="530" r="0.7"/><circle cx="205" cy="530" r="0.7"/><circle cx="220" cy="530" r="0.7"/><circle cx="235" cy="530" r="0.7"/><circle cx="250" cy="530" r="0.7"/><circle cx="265" cy="530" r="0.7"/><circle cx="280" cy="530" r="0.7"/><circle cx="295" cy="530" r="0.7"/><circle cx="310" cy="530" r="0.7"/><circle cx="325" cy="530" r="0.7"/><circle cx="340" cy="530" r="0.7"/><circle cx="355" cy="530" r="0.7"/><circle cx="370" cy="530" r="0.7"/><circle cx="385" cy="530" r="0.7"/><circle cx="400" cy="530" r="0.7"/><circle cx="25" cy="545" r="0.7"/><circle cx="40" cy="545" r="0.7"/><circle cx="55" cy="545" r="0.7"/><circle cx="70" cy="545" r="0.7"/><circle cx="85" cy="545" r="0.7"/><circle cx="100" cy="545" r="0.7"/><circle cx="115" cy="545" r="0.7"/><circle cx="130" cy="545" r="0.7"/><circle cx="145" cy="545" r="0.7"/><circle cx="160" cy="545" r="0.7"/><circle cx="175" cy="545" r="0.7"/><circle cx="190" cy="545" r="0.7"/><circle cx="205" cy="545" r="0.7"/><circle cx="220" cy="545" r="0.7"/><circle cx="235" cy="545" r="0.7"/><circle cx="250" cy="545" r="0.7"/><circle cx="265" cy="545" r="0.7"/><circle cx="280" cy="545" r="0.7"/><circle cx="295" cy="545" r="0.7"/><circle cx="310" cy="545" r="0.7"/><circle cx="325" cy="545" r="0.7"/><circle cx="340" cy="545" r="0.7"/><circle cx="355" cy="545" r="0.7"/><circle cx="370" cy="545" r="0.7"/><circle cx="385" cy="545" r="0.7"/><circle cx="400" cy="545" r="0.7"/><circle cx="25" cy="560" r="0.7"/><circle cx="40" cy="560" r="0.7"/><circle cx="55" cy="560" r="0.7"/><circle cx="70" cy="560" r="0.7"/><circle cx="85" cy="560" r="0.7"/><circle cx="100" cy="560" r="0.7"/><circle cx="115" cy="560" r="0.7"/><circle cx="130" cy="560" r="0.7"/><circle cx="145" cy="560" r="0.7"/><circle cx="160" cy="560" r="0.7"/><circle cx="175" cy="560" r="0.7"/><circle cx="190" cy="560" r="0.7"/><circle cx="205" cy="560" r="0.7"/><circle cx="220" cy="560" r="0.7"/><circle cx="235" cy="560" r="0.7"/><circle cx="250" cy="560" r="0.7"/><circle cx="265" cy="560" r="0.7"/><circle cx="280" cy="560" r="0.7"/><circle cx="295" cy="560" r="0.7"/><circle cx="310" cy="560" r="0.7"/><circle cx="325" cy="560" r="0.7"/><circle cx="340" cy="560" r="0.7"/><circle cx="355" cy="560" r="0.7"/><circle cx="370" cy="560" r="0.7"/><circle cx="385" cy="560" r="0.7"/><circle cx="400" cy="560" r="0.7"/><circle cx="25" cy="575" r="0.7"/><circle cx="40" cy="575" r="0.7"/><circle cx="55" cy="575" r="0.7"/><circle cx="70" cy="575" r="0.7"/><circle cx="85" cy="575" r="0.7"/><circle cx="100" cy="575" r="0.7"/><circle cx="115" cy="575" r="0.7"/><circle cx="130" cy="575" r="0.7"/><circle cx="145" cy="575" r="0.7"/><circle cx="160" cy="575" r="0.7"/><circle cx="175" cy="575" r="0.7"/><circle cx="190" cy="575" r="0.7"/><circle cx="205" cy="575" r="0.7"/><circle cx="220" cy="575" r="0.7"/><circle cx="235" cy="575" r="0.7"/><circle cx="250" cy="575" r="0.7"/><circle cx="265" cy="575" r="0.7"/><circle cx="280" cy="575" r="0.7"/><circle cx="295" cy="575" r="0.7"/><circle cx="310" cy="575" r="0.7"/><circle cx="325" cy="575" r="0.7"/><circle cx="340" cy="575" r="0.7"/><circle cx="355" cy="575" r="0.7"/><circle cx="370" cy="575" r="0.7"/><circle cx="385" cy="575" r="0.7"/><circle cx="400" cy="575" r="0.7"/><circle cx="25" cy="590" r="0.7"/><circle cx="40" cy="590" r="0.7"/><circle cx="55" cy="590" r="0.7"/><circle cx="70" cy="590" r="0.7"/><circle cx="85" cy="590" r="0.7"/><circle cx="100" cy="590" r="0.7"/><circle cx="115" cy="590" r="0.7"/><circle cx="130" cy="590" r="0.7"/><circle cx="145" cy="590" r="0.7"/><circle cx="160" cy="590" r="0.7"/><circle cx="175" cy="590" r="0.7"/><circle cx="190" cy="590" r="0.7"/><circle cx="205" cy="590" r="0.7"/><circle cx="220" cy="590" r="0.7"/><circle cx="235" cy="590" r="0.7"/><circle cx="250" cy="590" r="0.7"/><circle cx="265" cy="590" r="0.7"/><circle cx="280" cy="590" r="0.7"/><circle cx="295" cy="590" r="0.7"/><circle cx="310" cy="590" r="0.7"/><circle cx="325" cy="590" r="0.7"/><circle cx="340" cy="590" r="0.7"/><circle cx="355" cy="590" r="0.7"/><circle cx="370" cy="590" r="0.7"/><circle cx="385" cy="590" r="0.7"/><circle cx="400" cy="590" r="0.7"/><circle cx="25" cy="605" r="0.7"/><circle cx="40" cy="605" r="0.7"/><circle cx="55" cy="605" r="0.7"/><circle cx="70" cy="605" r="0.7"/><circle cx="85" cy="605" r="0.7"/><circle cx="100" cy="605" r="0.7"/><circle cx="115" cy="605" r="0.7"/><circle cx="130" cy="605" r="0.7"/><circle cx="145" cy="605" r="0.7"/><circle cx="160" cy="605" r="0.7"/><circle cx="175" cy="605" r="0.7"/><circle cx="190" cy="605" r="0.7"/><circle cx="205" cy="605" r="0.7"/><circle cx="220" cy="605" r="0.7"/><circle cx="235" cy="605" r="0.7"/><circle cx="250" cy="605" r="0.7"/><circle cx="265" cy="605" r="0.7"/><circle cx="280" cy="605" r="0.7"/><circle cx="295" cy="605" r="0.7"/><circle cx="310" cy="605" r="0.7"/><circle cx="325" cy="605" r="0.7"/><circle cx="340" cy="605" r="0.7"/><circle cx="355" cy="605" r="0.7"/><circle cx="370" cy="605" r="0.7"/><circle cx="385" cy="605" r="0.7"/><circle cx="400" cy="605" r="0.7"/><circle cx="25" cy="620" r="0.7"/><circle cx="40" cy="620" r="0.7"/><circle cx="55" cy="620" r="0.7"/><circle cx="70" cy="620" r="0.7"/><circle cx="85" cy="620" r="0.7"/><circle cx="100" cy="620" r="0.7"/><circle cx="115" cy="620" r="0.7"/><circle cx="130" cy="620" r="0.7"/><circle cx="145" cy="620" r="0.7"/><circle cx="160" cy="620" r="0.7"/><circle cx="175" cy="620" r="0.7"/><circle cx="190" cy="620" r="0.7"/><circle cx="205" cy="620" r="0.7"/><circle cx="220" cy="620" r="0.7"/><circle cx="235" cy="620" r="0.7"/><circle cx="250" cy="620" r="0.7"/><circle cx="265" cy="620" r="0.7"/><circle cx="280" cy="620" r="0.7"/><circle cx="295" cy="620" r="0.7"/><circle cx="310" cy="620" r="0.7"/><circle cx="325" cy="620" r="0.7"/><circle cx="340" cy="620" r="0.7"/><circle cx="355" cy="620" r="0.7"/><circle cx="370" cy="620" r="0.7"/><circle cx="385" cy="620" r="0.7"/><circle cx="400" cy="620" r="0.7"/><circle cx="25" cy="635" r="0.7"/><circle cx="40" cy="635" r="0.7"/><circle cx="55" cy="635" r="0.7"/><circle cx="70" cy="635" r="0.7"/><circle cx="85" cy="635" r="0.7"/><circle cx="100" cy="635" r="0.7"/><circle cx="115" cy="635" r="0.7"/><circle cx="130" cy="635" r="0.7"/><circle cx="145" cy="635" r="0.7"/><circle cx="160" cy="635" r="0.7"/><circle cx="175" cy="635" r="0.7"/><circle cx="190" cy="635" r="0.7"/><circle cx="205" cy="635" r="0.7"/><circle cx="220" cy="635" r="0.7"/><circle cx="235" cy="635" r="0.7"/><circle cx="250" cy="635" r="0.7"/><circle cx="265" cy="635" r="0.7"/><circle cx="280" cy="635" r="0.7"/><circle cx="295" cy="635" r="0.7"/><circle cx="310" cy="635" r="0.7"/><circle cx="325" cy="635" r="0.7"/><circle cx="340" cy="635" r="0.7"/><circle cx="355" cy="635" r="0.7"/><circle cx="370" cy="635" r="0.7"/><circle cx="385" cy="635" r="0.7"/><circle cx="400" cy="635" r="0.7"/><circle cx="25" cy="650" r="0.7"/><circle cx="40" cy="650" r="0.7"/><circle cx="55" cy="650" r="0.7"/><circle cx="70" cy="650" r="0.7"/><circle cx="85" cy="650" r="0.7"/><circle cx="100" cy="650" r="0.7"/><circle cx="115" cy="650" r="0.7"/><circle cx="130" cy="650" r="0.7"/><circle cx="145" cy="650" r="0.7"/><circle cx="160" cy="650" r="0.7"/><circle cx="175" cy="650" r="0.7"/><circle cx="190" cy="650" r="0.7"/><circle cx="205" cy="650" r="0.7"/><circle cx="220" cy="650" r="0.7"/><circle cx="235" cy="650" r="0.7"/><circle cx="250" cy="650" r="0.7"/><circle cx="265" cy="650" r="0.7"/><circle cx="280" cy="650" r="0.7"/><circle cx="295" cy="650" r="0.7"/><circle cx="310" cy="650" r="0.7"/><circle cx="325" cy="650" r="0.7"/><circle cx="340" cy="650" r="0.7"/><circle cx="355" cy="650" r="0.7"/><circle cx="370" cy="650" r="0.7"/><circle cx="385" cy="650" r="0.7"/><circle cx="400" cy="650" r="0.7"/><circle cx="25" cy="665" r="0.7"/><circle cx="40" cy="665" r="0.7"/><circle cx="55" cy="665" r="0.7"/><circle cx="70" cy="665" r="0.7"/><circle cx="85" cy="665" r="0.7"/><circle cx="100" cy="665" r="0.7"/><circle cx="115" cy="665" r="0.7"/><circle cx="130" cy="665" r="0.7"/><circle cx="145" cy="665" r="0.7"/><circle cx="160" cy="665" r="0.7"/><circle cx="175" cy="665" r="0.7"/><circle cx="190" cy="665" r="0.7"/><circle cx="205" cy="665" r="0.7"/><circle cx="220" cy="665" r="0.7"/><circle cx="235" cy="665" r="0.7"/><circle cx="250" cy="665" r="0.7"/><circle cx="265" cy="665" r="0.7"/><circle cx="280" cy="665" r="0.7"/><circle cx="295" cy="665" r="0.7"/><circle cx="310" cy="665" r="0.7"/><circle cx="325" cy="665" r="0.7"/><circle cx="340" cy="665" r="0.7"/><circle cx="355" cy="665" r="0.7"/><circle cx="370" cy="665" r="0.7"/><circle cx="385" cy="665" r="0.7"/><circle cx="400" cy="665" r="0.7"/><circle cx="25" cy="680" r="0.7"/><circle cx="40" cy="680" r="0.7"/><circle cx="55" cy="680" r="0.7"/><circle cx="70" cy="680" r="0.7"/><circle cx="85" cy="680" r="0.7"/><circle cx="100" cy="680" r="0.7"/><circle cx="115" cy="680" r="0.7"/><circle cx="130" cy="680" r="0.7"/><circle cx="145" cy="680" r="0.7"/><circle cx="160" cy="680" r="0.7"/><circle cx="175" cy="680" r="0.7"/><circle cx="190" cy="680" r="0.7"/><circle cx="205" cy="680" r="0.7"/><circle cx="220" cy="680" r="0.7"/><circle cx="235" cy="680" r="0.7"/><circle cx="250" cy="680" r="0.7"/><circle cx="265" cy="680" r="0.7"/><circle cx="280" cy="680" r="0.7"/><circle cx="295" cy="680" r="0.7"/><circle cx="310" cy="680" r="0.7"/><circle cx="325" cy="680" r="0.7"/><circle cx="340" cy="680" r="0.7"/><circle cx="355" cy="680" r="0.7"/><circle cx="370" cy="680" r="0.7"/><circle cx="385" cy="680" r="0.7"/><circle cx="400" cy="680" r="0.7"/><circle cx="25" cy="695" r="0.7"/><circle cx="40" cy="695" r="0.7"/><circle cx="55" cy="695" r="0.7"/><circle cx="70" cy="695" r="0.7"/><circle cx="85" cy="695" r="0.7"/><circle cx="100" cy="695" r="0.7"/><circle cx="115" cy="695" r="0.7"/><circle cx="130" cy="695" r="0.7"/><circle cx="145" cy="695" r="0.7"/><circle cx="160" cy="695" r="0.7"/><circle cx="175" cy="695" r="0.7"/><circle cx="190" cy="695" r="0.7"/><circle cx="205" cy="695" r="0.7"/><circle cx="220" cy="695" r="0.7"/><circle cx="235" cy="695" r="0.7"/><circle cx="250" cy="695" r="0.7"/><circle cx="265" cy="695" r="0.7"/><circle cx="280" cy="695" r="0.7"/><circle cx="295" cy="695" r="0.7"/><circle cx="310" cy="695" r="0.7"/><circle cx="325" cy="695" r="0.7"/><circle cx="340" cy="695" r="0.7"/><circle cx="355" cy="695" r="0.7"/><circle cx="370" cy="695" r="0.7"/><circle cx="385" cy="695" r="0.7"/><circle cx="400" cy="695" r="0.7"/><circle cx="25" cy="710" r="0.7"/><circle cx="40" cy="710" r="0.7"/><circle cx="55" cy="710" r="0.7"/><circle cx="70" cy="710" r="0.7"/><circle cx="85" cy="710" r="0.7"/><circle cx="100" cy="710" r="0.7"/><circle cx="115" cy="710" r="0.7"/><circle cx="130" cy="710" r="0.7"/><circle cx="145" cy="710" r="0.7"/><circle cx="160" cy="710" r="0.7"/><circle cx="175" cy="710" r="0.7"/><circle cx="190" cy="710" r="0.7"/><circle cx="205" cy="710" r="0.7"/><circle cx="220" cy="710" r="0.7"/><circle cx="235" cy="710" r="0.7"/><circle cx="250" cy="710" r="0.7"/><circle cx="265" cy="710" r="0.7"/><circle cx="280" cy="710" r="0.7"/><circle cx="295" cy="710" r="0.7"/><circle cx="310" cy="710" r="0.7"/><circle cx="325" cy="710" r="0.7"/><circle cx="340" cy="710" r="0.7"/><circle cx="355" cy="710" r="0.7"/><circle cx="370" cy="710" r="0.7"/><circle cx="385" cy="710" r="0.7"/><circle cx="400" cy="710" r="0.7"/><circle cx="25" cy="725" r="0.7"/><circle cx="40" cy="725" r="0.7"/><circle cx="55" cy="725" r="0.7"/><circle cx="70" cy="725" r="0.7"/><circle cx="85" cy="725" r="0.7"/><circle cx="100" cy="725" r="0.7"/><circle cx="115" cy="725" r="0.7"/><circle cx="130" cy="725" r="0.7"/><circle cx="145" cy="725" r="0.7"/><circle cx="160" cy="725" r="0.7"/><circle cx="175" cy="725" r="0.7"/><circle cx="190" cy="725" r="0.7"/><circle cx="205" cy="725" r="0.7"/><circle cx="220" cy="725" r="0.7"/><circle cx="235" cy="725" r="0.7"/><circle cx="250" cy="725" r="0.7"/><circle cx="265" cy="725" r="0.7"/><circle cx="280" cy="725" r="0.7"/><circle cx="295" cy="725" r="0.7"/><circle cx="310" cy="725" r="0.7"/><circle cx="325" cy="725" r="0.7"/><circle cx="340" cy="725" r="0.7"/><circle cx="355" cy="725" r="0.7"/><circle cx="370" cy="725" r="0.7"/><circle cx="385" cy="725" r="0.7"/><circle cx="400" cy="725" r="0.7"/><circle cx="25" cy="740" r="0.7"/><circle cx="40" cy="740" r="0.7"/><circle cx="55" cy="740" r="0.7"/><circle cx="70" cy="740" r="0.7"/><circle cx="85" cy="740" r="0.7"/><circle cx="100" cy="740" r="0.7"/><circle cx="115" cy="740" r="0.7"/><circle cx="130" cy="740" r="0.7"/><circle cx="145" cy="740" r="0.7"/><circle cx="160" cy="740" r="0.7"/><circle cx="175" cy="740" r="0.7"/><circle cx="190" cy="740" r="0.7"/><circle cx="205" cy="740" r="0.7"/><circle cx="220" cy="740" r="0.7"/><circle cx="235" cy="740" r="0.7"/><circle cx="250" cy="740" r="0.7"/><circle cx="265" cy="740" r="0.7"/><circle cx="280" cy="740" r="0.7"/><circle cx="295" cy="740" r="0.7"/><circle cx="310" cy="740" r="0.7"/><circle cx="325" cy="740" r="0.7"/><circle cx="340" cy="740" r="0.7"/><circle cx="355" cy="740" r="0.7"/><circle cx="370" cy="740" r="0.7"/><circle cx="385" cy="740" r="0.7"/><circle cx="400" cy="740" r="0.7"/><circle cx="25" cy="755" r="0.7"/><circle cx="40" cy="755" r="0.7"/><circle cx="55" cy="755" r="0.7"/><circle cx="70" cy="755" r="0.7"/><circle cx="85" cy="755" r="0.7"/><circle cx="100" cy="755" r="0.7"/><circle cx="115" cy="755" r="0.7"/><circle cx="130" cy="755" r="0.7"/><circle cx="145" cy="755" r="0.7"/><circle cx="160" cy="755" r="0.7"/><circle cx="175" cy="755" r="0.7"/><circle cx="190" cy="755" r="0.7"/><circle cx="205" cy="755" r="0.7"/><circle cx="220" cy="755" r="0.7"/><circle cx="235" cy="755" r="0.7"/><circle cx="250" cy="755" r="0.7"/><circle cx="265" cy="755" r="0.7"/><circle cx="280" cy="755" r="0.7"/><circle cx="295" cy="755" r="0.7"/><circle cx="310" cy="755" r="0.7"/><circle cx="325" cy="755" r="0.7"/><circle cx="340" cy="755" r="0.7"/><circle cx="355" cy="755" r="0.7"/><circle cx="370" cy="755" r="0.7"/><circle cx="385" cy="755" r="0.7"/><circle cx="400" cy="755" r="0.7"/><circle cx="25" cy="770" r="0.7"/><circle cx="40" cy="770" r="0.7"/><circle cx="55" cy="770" r="0.7"/><circle cx="70" cy="770" r="0.7"/><circle cx="85" cy="770" r="0.7"/><circle cx="100" cy="770" r="0.7"/><circle cx="115" cy="770" r="0.7"/><circle cx="130" cy="770" r="0.7"/><circle cx="145" cy="770" r="0.7"/><circle cx="160" cy="770" r="0.7"/><circle cx="175" cy="770" r="0.7"/><circle cx="190" cy="770" r="0.7"/><circle cx="205" cy="770" r="0.7"/><circle cx="220" cy="770" r="0.7"/><circle cx="235" cy="770" r="0.7"/><circle cx="250" cy="770" r="0.7"/><circle cx="265" cy="770" r="0.7"/><circle cx="280" cy="770" r="0.7"/><circle cx="295" cy="770" r="0.7"/><circle cx="310" cy="770" r="0.7"/><circle cx="325" cy="770" r="0.7"/><circle cx="340" cy="770" r="0.7"/><circle cx="355" cy="770" r="0.7"/><circle cx="370" cy="770" r="0.7"/><circle cx="385" cy="770" r="0.7"/><circle cx="400" cy="770" r="0.7"/><circle cx="25" cy="785" r="0.7"/><circle cx="40" cy="785" r="0.7"/><circle cx="55" cy="785" r="0.7"/><circle cx="70" cy="785" r="0.7"/><circle cx="85" cy="785" r="0.7"/><circle cx="100" cy="785" r="0.7"/><circle cx="115" cy="785" r="0.7"/><circle cx="130" cy="785" r="0.7"/><circle cx="145" cy="785" r="0.7"/><circle cx="160" cy="785" r="0.7"/><circle cx="175" cy="785" r="0.7"/><circle cx="190" cy="785" r="0.7"/><circle cx="205" cy="785" r="0.7"/><circle cx="220" cy="785" r="0.7"/><circle cx="235" cy="785" r="0.7"/><circle cx="250" cy="785" r="0.7"/><circle cx="265" cy="785" r="0.7"/><circle cx="280" cy="785" r="0.7"/><circle cx="295" cy="785" r="0.7"/><circle cx="310" cy="785" r="0.7"/><circle cx="325" cy="785" r="0.7"/><circle cx="340" cy="785" r="0.7"/><circle cx="355" cy="785" r="0.7"/><circle cx="370" cy="785" r="0.7"/><circle cx="385" cy="785" r="0.7"/><circle cx="400" cy="785" r="0.7"/><circle cx="25" cy="800" r="0.7"/><circle cx="40" cy="800" r="0.7"/><circle cx="55" cy="800" r="0.7"/><circle cx="70" cy="800" r="0.7"/><circle cx="85" cy="800" r="0.7"/><circle cx="100" cy="800" r="0.7"/><circle cx="115" cy="800" r="0.7"/><circle cx="130" cy="800" r="0.7"/><circle cx="145" cy="800" r="0.7"/><circle cx="160" cy="800" r="0.7"/><circle cx="175" cy="800" r="0.7"/><circle cx="190" cy="800" r="0.7"/><circle cx="205" cy="800" r="0.7"/><circle cx="220" cy="800" r="0.7"/><circle cx="235" cy="800" r="0.7"/><circle cx="250" cy="800" r="0.7"/><circle cx="265" cy="800" r="0.7"/><circle cx="280" cy="800" r="0.7"/><circle cx="295" cy="800" r="0.7"/><circle cx="310" cy="800" r="0.7"/><circle cx="325" cy="800" r="0.7"/><circle cx="340" cy="800" r="0.7"/><circle cx="355" cy="800" r="0.7"/><circle cx="370" cy="800" r="0.7"/><circle cx="385" cy="800" r="0.7"/><circle cx="400" cy="800" r="0.7"/><circle cx="25" cy="815" r="0.7"/><circle cx="40" cy="815" r="0.7"/><circle cx="55" cy="815" r="0.7"/><circle cx="70" cy="815" r="0.7"/><circle cx="85" cy="815" r="0.7"/><circle cx="100" cy="815" r="0.7"/><circle cx="115" cy="815" r="0.7"/><circle cx="130" cy="815" r="0.7"/><circle cx="145" cy="815" r="0.7"/><circle cx="160" cy="815" r="0.7"/><circle cx="175" cy="815" r="0.7"/><circle cx="190" cy="815" r="0.7"/><circle cx="205" cy="815" r="0.7"/><circle cx="220" cy="815" r="0.7"/><circle cx="235" cy="815" r="0.7"/><circle cx="250" cy="815" r="0.7"/><circle cx="265" cy="815" r="0.7"/><circle cx="280" cy="815" r="0.7"/><circle cx="295" cy="815" r="0.7"/><circle cx="310" cy="815" r="0.7"/><circle cx="325" cy="815" r="0.7"/><circle cx="340" cy="815" r="0.7"/><circle cx="355" cy="815" r="0.7"/><circle cx="370" cy="815" r="0.7"/><circle cx="385" cy="815" r="0.7"/><circle cx="400" cy="815" r="0.7"/><circle cx="25" cy="830" r="0.7"/><circle cx="40" cy="830" r="0.7"/><circle cx="55" cy="830" r="0.7"/><circle cx="70" cy="830" r="0.7"/><circle cx="85" cy="830" r="0.7"/><circle cx="100" cy="830" r="0.7"/><circle cx="115" cy="830" r="0.7"/><circle cx="130" cy="830" r="0.7"/><circle cx="145" cy="830" r="0.7"/><circle cx="160" cy="830" r="0.7"/><circle cx="175" cy="830" r="0.7"/><circle cx="190" cy="830" r="0.7"/><circle cx="205" cy="830" r="0.7"/><circle cx="220" cy="830" r="0.7"/><circle cx="235" cy="830" r="0.7"/><circle cx="250" cy="830" r="0.7"/><circle cx="265" cy="830" r="0.7"/><circle cx="280" cy="830" r="0.7"/><circle cx="295" cy="830" r="0.7"/><circle cx="310" cy="830" r="0.7"/><circle cx="325" cy="830" r="0.7"/><circle cx="340" cy="830" r="0.7"/><circle cx="355" cy="830" r="0.7"/><circle cx="370" cy="830" r="0.7"/><circle cx="385" cy="830" r="0.7"/><circle cx="400" cy="830" r="0.7"/><circle cx="25" cy="845" r="0.7"/><circle cx="40" cy="845" r="0.7"/><circle cx="55" cy="845" r="0.7"/><circle cx="70" cy="845" r="0.7"/><circle cx="85" cy="845" r="0.7"/><circle cx="100" cy="845" r="0.7"/><circle cx="115" cy="845" r="0.7"/><circle cx="130" cy="845" r="0.7"/><circle cx="145" cy="845" r="0.7"/><circle cx="160" cy="845" r="0.7"/><circle cx="175" cy="845" r="0.7"/><circle cx="190" cy="845" r="0.7"/><circle cx="205" cy="845" r="0.7"/><circle cx="220" cy="845" r="0.7"/><circle cx="235" cy="845" r="0.7"/><circle cx="250" cy="845" r="0.7"/><circle cx="265" cy="845" r="0.7"/><circle cx="280" cy="845" r="0.7"/><circle cx="295" cy="845" r="0.7"/><circle cx="310" cy="845" r="0.7"/><circle cx="325" cy="845" r="0.7"/><circle cx="340" cy="845" r="0.7"/><circle cx="355" cy="845" r="0.7"/><circle cx="370" cy="845" r="0.7"/><circle cx="385" cy="845" r="0.7"/><circle cx="400" cy="845" r="0.7"/><circle cx="25" cy="860" r="0.7"/><circle cx="40" cy="860" r="0.7"/><circle cx="55" cy="860" r="0.7"/><circle cx="70" cy="860" r="0.7"/><circle cx="85" cy="860" r="0.7"/><circle cx="100" cy="860" r="0.7"/><circle cx="115" cy="860" r="0.7"/><circle cx="130" cy="860" r="0.7"/><circle cx="145" cy="860" r="0.7"/><circle cx="160" cy="860" r="0.7"/><circle cx="175" cy="860" r="0.7"/><circle cx="190" cy="860" r="0.7"/><circle cx="205" cy="860" r="0.7"/><circle cx="220" cy="860" r="0.7"/><circle cx="235" cy="860" r="0.7"/><circle cx="250" cy="860" r="0.7"/><circle cx="265" cy="860" r="0.7"/><circle cx="280" cy="860" r="0.7"/><circle cx="295" cy="860" r="0.7"/><circle cx="310" cy="860" r="0.7"/><circle cx="325" cy="860" r="0.7"/><circle cx="340" cy="860" r="0.7"/><circle cx="355" cy="860" r="0.7"/><circle cx="370" cy="860" r="0.7"/><circle cx="385" cy="860" r="0.7"/><circle cx="400" cy="860" r="0.7"/><circle cx="25" cy="875" r="0.7"/><circle cx="40" cy="875" r="0.7"/><circle cx="55" cy="875" r="0.7"/><circle cx="70" cy="875" r="0.7"/><circle cx="85" cy="875" r="0.7"/><circle cx="100" cy="875" r="0.7"/><circle cx="115" cy="875" r="0.7"/><circle cx="130" cy="875" r="0.7"/><circle cx="145" cy="875" r="0.7"/><circle cx="160" cy="875" r="0.7"/><circle cx="175" cy="875" r="0.7"/><circle cx="190" cy="875" r="0.7"/><circle cx="205" cy="875" r="0.7"/><circle cx="220" cy="875" r="0.7"/><circle cx="235" cy="875" r="0.7"/><circle cx="250" cy="875" r="0.7"/><circle cx="265" cy="875" r="0.7"/><circle cx="280" cy="875" r="0.7"/><circle cx="295" cy="875" r="0.7"/><circle cx="310" cy="875" r="0.7"/><circle cx="325" cy="875" r="0.7"/><circle cx="340" cy="875" r="0.7"/><circle cx="355" cy="875" r="0.7"/><circle cx="370" cy="875" r="0.7"/><circle cx="385" cy="875" r="0.7"/><circle cx="400" cy="875" r="0.7"/><circle cx="25" cy="890" r="0.7"/><circle cx="40" cy="890" r="0.7"/><circle cx="55" cy="890" r="0.7"/><circle cx="70" cy="890" r="0.7"/><circle cx="85" cy="890" r="0.7"/><circle cx="100" cy="890" r="0.7"/><circle cx="115" cy="890" r="0.7"/><circle cx="130" cy="890" r="0.7"/><circle cx="145" cy="890" r="0.7"/><circle cx="160" cy="890" r="0.7"/><circle cx="175" cy="890" r="0.7"/><circle cx="190" cy="890" r="0.7"/><circle cx="205" cy="890" r="0.7"/><circle cx="220" cy="890" r="0.7"/><circle cx="235" cy="890" r="0.7"/><circle cx="250" cy="890" r="0.7"/><circle cx="265" cy="890" r="0.7"/><circle cx="280" cy="890" r="0.7"/><circle cx="295" cy="890" r="0.7"/><circle cx="310" cy="890" r="0.7"/><circle cx="325" cy="890" r="0.7"/><circle cx="340" cy="890" r="0.7"/><circle cx="355" cy="890" r="0.7"/><circle cx="370" cy="890" r="0.7"/><circle cx="385" cy="890" r="0.7"/><circle cx="400" cy="890" r="0.7"/>
-        </g>
-      </g>
+const SUBTITLE = "BIO ML ENGINEER / GENE CIRCUIT SYSTEMS / UNIT 01 / REV A";
 
-      <!-- layered bevel lines just inside white panel, parallel to edge -->
-      <!-- equidistant relief lines, animated outward from the border -->
-      <g id="relief" fill="none" stroke-linejoin="miter">
-        <path stroke="#cccccb" stroke-width="1"></path>
-        <path stroke="#cccccb" stroke-width="1"></path>
-        <path stroke="#cccccb" stroke-width="1"></path>
-      </g>
+// intersection of line a→b with line c→d (used to miter offset segments)
+function lineInt(a, b, c, d) {
+  const x1 = a[0], y1 = a[1], x2 = b[0], y2 = b[1];
+  const x3 = c[0], y3 = c[1], x4 = d[0], y4 = d[1];
+  const den = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  if (Math.abs(den) < 1e-6) return b.slice();
+  const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / den;
+  return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+}
 
-      <!-- top-left marker  ▪|||▪  (left-aligned with title, dropped to flat border) -->
-      <g>
-        <rect x="296" y="192" width="14" height="7" fill="#2a2f38"/>
-        <rect x="316" y="191" width="2" height="9" fill="#9aa0a8"/>
-        <rect x="323" y="191" width="2" height="9" fill="#9aa0a8"/>
-        <rect x="330" y="191" width="2" height="9" fill="#9aa0a8"/>
-        <rect x="350" y="192" width="11" height="7" fill="#b53322"/>
-      </g>
+function toPath(pts) {
+  let s = "M";
+  for (let i = 0; i < pts.length; i++) s += (i ? " L" : "") + fx2(pts[i][0]) + "," + fx2(pts[i][1]);
+  return s;
+}
 
-      <!-- title -->
-      <text class="title" x="296" y="255" font-size="20" font-weight="600" letter-spacing="6.4" fill="#10131a">TRETIKOV</text>
-      <text x="296" y="285" font-size="13" letter-spacing="1.1" fill="#464d53">BIO ML ENGINEER / GENE CIRCUIT SYSTEMS / UNIT 01 / REV A</text>
+/* Offset a seam polyline perpendicular by `dist`, then extend its first/last
+   point out to the plate edges so the relief band always spans the full seam.
+   `edge` names the axis the seam terminates on: 'y' for landscape (top/bottom),
+   'x' for portrait (left/right). Sign of `dist` chooses which side to grow into. */
+function offsetSeam(P, dist, edge) {
+  const segs = [];
+  for (let i = 0; i < P.length - 1; i++) {
+    const dx = P[i + 1][0] - P[i][0], dy = P[i + 1][1] - P[i][1];
+    const L = Math.hypot(dx, dy) || 1, nx = (dy / L) * dist, ny = (-dx / L) * dist;
+    segs.push([[P[i][0] + nx, P[i][1] + ny], [P[i + 1][0] + nx, P[i + 1][1] + ny]]);
+  }
+  const out = [segs[0][0].slice()];
+  for (let j = 1; j < segs.length; j++) out.push(lineInt(segs[j - 1][0], segs[j - 1][1], segs[j][0], segs[j][1]));
+  out.push(segs[segs.length - 1][1].slice());
+  const s0 = segs[0], sl = segs[segs.length - 1];
+  if (edge.axis === "y") {
+    out[0] = [s0[0][0] + (s0[1][0] - s0[0][0]) * ((edge.v0 - s0[0][1]) / ((s0[1][1] - s0[0][1]) || 1)), edge.v0];
+    out[out.length - 1] = [sl[0][0] + (sl[1][0] - sl[0][0]) * ((edge.v1 - sl[0][1]) / ((sl[1][1] - sl[0][1]) || 1)), edge.v1];
+  } else {
+    out[0] = [edge.v0, s0[0][1] + (s0[1][1] - s0[0][1]) * ((edge.v0 - s0[0][0]) / ((s0[1][0] - s0[0][0]) || 1))];
+    out[out.length - 1] = [edge.v1, sl[0][1] + (sl[1][1] - sl[0][1]) * ((edge.v1 - sl[0][0]) / ((sl[1][0] - sl[0][0]) || 1))];
+  }
+  return out;
+}
 
-      <!-- (gene-circuit diagram removed) -->
+function seamXAtY(P, y) {
+  for (let i = 0; i < P.length - 1; i++) {
+    const [x1, y1] = P[i], [x2, y2] = P[i + 1];
+    if ((y >= y1 && y <= y2) || (y >= y2 && y <= y1)) {
+      const t = (y - y1) / ((y2 - y1) || 1);
+      return x1 + t * (x2 - x1);
+    }
+  }
+  return P[P.length - 1][0];
+}
 
-      <!-- decorative crosses -->
-      <g stroke="#b9b9b7" stroke-width="2">
-        <path d="M352,470 h22 M363,459 v22"/>
-        <path d="M495,775 h22 M506,764 v22"/>
-      </g>
-      <g stroke="#c6c6c4" stroke-width="2">
-        <path d="M1387,92 h22 M1398,81 v22"/>
-        <path d="M1420,108 h14 M1427,101 v14"/>
-      </g>
-      <!-- faint cross in dark area -->
-      <g stroke="#3f4654" stroke-width="2">
-        <path d="M80,172 h22 M91,161 v22"/>
-      </g>
+// greedily wrap the subtitle on its " / " separators to fit the open field
+function packLines(text, avail, charW) {
+  const tokens = text.split(" / ");
+  const lines = [];
+  let cur = "";
+  for (const tk of tokens) {
+    const cand = cur ? cur + " / " + tk : tk;
+    if (cur && cand.length * charW > avail) { lines.push(cur); cur = tk; }
+    else cur = cand;
+  }
+  if (cur) lines.push(cur);
+  return lines;
+}
 
-      <!-- bottom-left vertical text + ticks -->
-      <text x="44" y="640" font-size="14" letter-spacing="4" fill="#5a626e" transform="rotate(90 44 640)">TRK-01- &#9733;</text>
-      <g fill="#aeb4bd">
-        <path d="M70,695 l9,0 l-9,7 z"/>
-        <path d="M70,752 l9,0 l-9,7 z"/>
-      </g>
-      <line x1="40" y1="820" x2="40" y2="905" stroke="#cfd3d8" stroke-width="2"/>
+function useViewport() {
+  const [vp, setVp] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  useEffect(() => {
+    let raf = 0;
+    const onResize = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => setVp({ w: window.innerWidth, h: window.innerHeight }));
+    };
+    window.addEventListener("resize", onResize);
+    window.addEventListener("orientationchange", onResize);
+    return () => {
+      window.removeEventListener("resize", onResize);
+      window.removeEventListener("orientationchange", onResize);
+      cancelAnimationFrame(raf);
+    };
+  }, []);
+  return vp;
+}
 
-      <!-- bottom-right ticks + dashes -->
-      <g stroke="#2a2f36" stroke-width="2">
-        <path d="M1455,835 v16 M1468,835 v16 M1481,835 v16 M1494,835 v16 M1507,835 v16 M1520,835 v16 M1533,835 v16"/>
-      </g>
-      <g fill="#1d2129">
-        <rect x="1565" y="840" width="14" height="7"/>
-        <rect x="1585" y="840" width="22" height="7"/>
-      </g>
-    </svg>
-`;
+// ───── parametric layout ───────────────────────────────────────
+function buildScene(W, H) {
+  const portrait = H > W;
+  const mn = Math.min(W, H);
+  const pad = clamp(mn * 0.03, 14, 44);
+  const m = clamp(mn * 0.045, 22, 64);          // corner margin
+  const tSize = clamp(mn * 0.026, 16, 30);       // title size
+  const sSize = clamp(tSize * 0.62, 10, 16);     // subtitle size
+  const tLS = tSize * 0.32, sLS = sSize * 0.085;
+
+  let seam, wedge, edge, nsign, titleX, titleBaseY, faint, panel, depth;
+
+  if (!portrait) {
+    const wedgeW = clamp(W * 0.26, 230, 520);
+    seam = FACETS.map(([a, b]) => [a * wedgeW, b * H]);
+    wedge = "M0,0 L" + seam.map((p) => fx2(p[0]) + "," + fx2(p[1])).join(" L") + " L0," + fx2(H) + " Z";
+    edge = { axis: "y", v0: 0, v1: H };
+    nsign = 1;                                    // relief grows right, into the field
+    titleBaseY = clamp(H * 0.30, 150, 360);
+    titleX = seamXAtY(seam, titleBaseY) + clamp(W * 0.04, 32, 90);  // clear the white wedge with margin
+    faint = [wedgeW * 0.34, H * 0.16];
+    panel = `M${fx2(wedgeW * 0.20)},${fx2(H * 0.075)} q0,-12 12,-12 L${fx2(wedgeW * 0.60)},${fx2(H * 0.055)}`;
+    depth = wedgeW;
+  } else {
+    const bandH = clamp(H * 0.24, 200, 460);
+    seam = FACETS.map(([a, b]) => [b * W, a * bandH]);
+    const rev = seam.slice().reverse();
+    wedge = "M0,0 L" + fx2(W) + ",0 L" + rev.map((p) => fx2(p[0]) + "," + fx2(p[1])).join(" L") + " Z";
+    edge = { axis: "x", v0: 0, v1: W };
+    nsign = -1;                                   // relief grows down, into the field
+    titleBaseY = bandH + clamp(H * 0.06, 34, 90);
+    titleX = m + pad;
+    faint = [W * 0.16, bandH * 0.42];
+    panel = `M${fx2(W * 0.30)},${fx2(bandH * 0.22)} q-12,0 -12,12 L${fx2(W * 0.285)},${fx2(bandH * 0.60)}`;
+    depth = bandH;
+  }
+
+  const avail = Math.max(W - titleX - m, 120);
+  const subLines = packLines(SUBTITLE, avail, sSize * 0.62 + sLS);
+
+  return {
+    W, H, portrait, m, pad, tSize, sSize, tLS, sLS,
+    seam, wedge, edge, nsign, titleX, depth,
+    markerY: titleBaseY - tSize * 2.0,
+    nameY: titleBaseY,
+    subY: titleBaseY + tSize * 1.35,
+    subLines, faint, panel,
+  };
+}
+
+// small reusable registration cross
+function Cross({ x, y, s, c, w }) {
+  return <path d={`M${fx2(x - s / 2)},${fx2(y)} h${fx2(s)} M${fx2(x)},${fx2(y - s / 2)} v${fx2(s)}`} stroke={c} strokeWidth={w || 2} />;
+}
 
 function Frame() {
-  const hostRef = useRef(null);
+  const { w: W, h: H } = useViewport();
+  const scene = useMemo(() => buildScene(W, H), [W, H]);
+  const svgRef = useRef(null);
 
+  // relief band — imperative per-frame so resizes never thrash React
   useEffect(() => {
-    const host = hostRef.current;
-    if (!host) return undefined;
-
-    // navy/purple right-edge polyline (top -> bottom)
-    const P = [[336,0],[169,170],[169,360],[293,520],[293,660],[411,800],[543,941]];
-    function lineInt(a,b,c,d){
-      const x1=a[0],y1=a[1],x2=b[0],y2=b[1],x3=c[0],y3=c[1],x4=d[0],y4=d[1];
-      const den=(x1-x2)*(y3-y4)-(y1-y2)*(x3-x4);
-      if(Math.abs(den)<1e-6) return b;
-      const t=((x1-x3)*(y3-y4)-(y1-y3)*(x3-x4))/den;
-      return [x1+t*(x2-x1), y1+t*(y2-y1)];
-    }
-    // parallel offset of the polyline by perpendicular distance into the white side
-    function offsetPoly(dist){
-      const segs=[];
-      for(let i=0;i<P.length-1;i++){
-        const dx=P[i+1][0]-P[i][0], dy=P[i+1][1]-P[i][1];
-        const L=Math.hypot(dx,dy); const nx=dy/L*dist, ny=-dx/L*dist;
-        segs.push([[P[i][0]+nx,P[i][1]+ny],[P[i+1][0]+nx,P[i+1][1]+ny]]);
-      }
-      const out=[segs[0][0]];
-      for(let j=1;j<segs.length;j++) out.push(lineInt(segs[j-1][0],segs[j-1][1],segs[j][0],segs[j][1]));
-      out.push(segs[segs.length-1][1]);
-      const s0=segs[0], dx0=s0[1][0]-s0[0][0], dy0=s0[1][1]-s0[0][1];
-      out[0]=[s0[0][0]+dx0*((0-s0[0][1])/dy0), 0];
-      const sl=segs[segs.length-1], dxl=sl[1][0]-sl[0][0], dyl=sl[1][1]-sl[0][1];
-      out[out.length-1]=[sl[0][0]+dxl*((941-sl[0][1])/dyl), 941];
-      return out;
-    }
-    function toPath(pts){
-      let s='M';
-      for(let i=0;i<pts.length;i++) s+=(i?' L':'')+pts[i][0].toFixed(1)+','+pts[i][1].toFixed(1);
-      return s;
-    }
-
-    const paths = Array.prototype.slice.call(host.querySelectorAll('#relief path'));
-    const N = paths.length;            // 3 visible at a time
-    const PERIOD = 4.2;                // seconds per relief to travel out & fade
-    const D_MIN = 0, D_MAX = 66;       // perpendicular travel range (px) — born at the border
-    const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const svg = svgRef.current;
+    if (!svg) return undefined;
+    const paths = Array.prototype.slice.call(svg.querySelectorAll("#relief path"));
+    const N = paths.length, PERIOD = 4.2;
+    const D_MAX = clamp(Math.min(W, H) * 0.07, 40, 92);
+    const { seam, edge, nsign } = scene;
+    const reduce = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     if (reduce) {
-      paths.forEach(function(p,i){ p.setAttribute('d', toPath(offsetPoly(D_MIN + (i+0.5)*(D_MAX-D_MIN)/N*0.6))); p.setAttribute('opacity','0.85'); });
+      paths.forEach((p, i) => {
+        const d = ((i + 0.5) / N) * D_MAX * 0.6;
+        p.setAttribute("d", toPath(offsetSeam(seam, nsign * d, edge)));
+        p.setAttribute("opacity", "0.8");
+      });
       return undefined;
     }
 
     let raf = 0;
-    function frame(now){
-      const t = now/1000;
-      for(let i=0;i<N;i++){
-        const frac = ((t/PERIOD) + i/N) % 1;
-        const d = D_MIN + (D_MAX-D_MIN)*frac;
-        // born at peak opacity right at the border, fading out as it moves away
-        const opacity = Math.pow(1-frac, 1.2) * 0.9;
-        paths[i].setAttribute('d', toPath(offsetPoly(d)));
-        paths[i].setAttribute('opacity', opacity.toFixed(3));
+    const tick = (now) => {
+      const t = now / 1000;
+      for (let i = 0; i < N; i++) {
+        const frac = ((t / PERIOD) + i / N) % 1;
+        const d = D_MAX * frac;                   // born at the seam, travels into the field
+        paths[i].setAttribute("d", toPath(offsetSeam(seam, nsign * d, edge)));
+        paths[i].setAttribute("opacity", (Math.pow(1 - frac, 1.2) * 0.9).toFixed(3));
       }
-      raf = requestAnimationFrame(frame);
-    }
-    raf = requestAnimationFrame(frame);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [scene, W, H]);
+
+  const s = scene;
+  const tickStep = clamp(s.tSize * 0.65, 11, 16);
+  const combX = (i) => fx2(i * tickStep);
+
+  // Edge chrome straddles the wedge↔field boundary, so ink it for whatever it lands on.
+  // Landscape: the wedge is on the left, so the left-edge label/arrows/rule lie on white
+  // while the top-right registration lies on the dark field; portrait flips which is which.
+  const leftInk = s.portrait ? PAL.mark : PAL.wedgeInk;     // vertical label, arrows, corner rule
+  const cornerInk = s.portrait ? PAL.wedgeInk : PAL.mark;   // top-right registration marks
 
   return (
     <div id="stage">
-      <div id="frame" ref={hostRef} dangerouslySetInnerHTML={{ __html: ART }} />
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <pattern id="dots" width="15" height="15" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.7" fill={PAL.wedgeDot} />
+          </pattern>
+          <clipPath id="wedgeclip"><path d={s.wedge} /></clipPath>
+        </defs>
+
+        {/* base field — morphogenesis image over a deep fallback, cover-fit */}
+        <rect x="0" y="0" width={W} height={H} fill={PAL.bg} />
+        <image href={PAL.image} x="0" y="0" width={W} height={H}
+          preserveAspectRatio="xMidYMid slice" />
+
+        {/* angular wedge — flipped to white "paper" */}
+        <path d={s.wedge} fill={PAL.wedge} />
+
+        {/* blueprint detail, confined to the wedge */}
+        <g clipPath="url(#wedgeclip)">
+          <rect x="0" y="0" width={W} height={H} fill="url(#dots)" />
+          <path d={s.panel} fill="none" stroke={PAL.wedgeLine} strokeWidth="1.2" />
+          <g stroke={PAL.wedgeLine} strokeWidth="2">
+            <path d={`M${fx2(s.faint[0] - 11)},${fx2(s.faint[1])} h22 M${fx2(s.faint[0])},${fx2(s.faint[1] - 11)} v22`} />
+          </g>
+        </g>
+
+        {/* equidistant relief lines, animated outward from the seam */}
+        <g id="relief" fill="none" strokeLinejoin="miter">
+          <path stroke={PAL.line} strokeWidth="1" />
+          <path stroke={PAL.line} strokeWidth="1" />
+          <path stroke={PAL.line} strokeWidth="1" />
+        </g>
+
+        {/* decorative crosses in the open field */}
+        <g stroke={PAL.mark} strokeWidth="2">
+          <Cross x={s.portrait ? W * 0.72 : Math.min(W * 0.62, W - s.m - 40)} y={s.portrait ? H * 0.55 : H * 0.45} s={22} c={PAL.mark} />
+          <Cross x={s.portrait ? W * 0.30 : Math.min(W * 0.48, W - s.m - 30)} y={s.portrait ? H * 0.80 : H * 0.80} s={18} c={PAL.mark} />
+        </g>
+
+        {/* top-right registration marks */}
+        <g stroke={cornerInk} strokeWidth="2">
+          <Cross x={W - s.m - 22} y={s.m + 11} s={22} c={cornerInk} />
+          <Cross x={W - s.m - 4} y={s.m + 26} s={14} c={cornerInk} />
+        </g>
+
+        {/* bottom-right tick comb + dashes */}
+        <g transform={`translate(${fx2(W - s.m - tickStep * 6)} ${fx2(H - s.m - 16)})`}>
+          <path stroke={PAL.ink} strokeWidth="2"
+            d={`M${combX(0)},0 v16 M${combX(1)},0 v16 M${combX(2)},0 v16 M${combX(3)},0 v16 M${combX(4)},0 v16 M${combX(5)},0 v16 M${combX(6)},0 v16`} />
+          <g fill={PAL.ink}>
+            <rect x={fx2(tickStep * 4)} y="-14" width="14" height="7" />
+            <rect x={fx2(tickStep * 4 + 20)} y="-14" width="22" height="7" />
+          </g>
+        </g>
+
+        {/* bottom-left vertical text + ticks */}
+        <g>
+          <text x={s.m} y={H * 0.52} fontSize="14" letterSpacing="4" fill={leftInk}
+            transform={`rotate(90 ${s.m} ${H * 0.52})`}>TRK-01- &#9733;</text>
+          <g fill={leftInk}>
+            <path d={`M${fx2(s.m + 26)},${fx2(H * 0.52 + 55)} l9,0 l-9,7 z`} />
+            <path d={`M${fx2(s.m + 26)},${fx2(H * 0.52 + 112)} l9,0 l-9,7 z`} />
+          </g>
+          <line x1={s.m - 4} y1={H - s.m - 85} x2={s.m - 4} y2={H - s.m} stroke={leftInk} strokeWidth="2" />
+        </g>
+
+        {/* title block — marker ▪|||▪ + name + subtitle */}
+        <g transform={`translate(${fx2(s.titleX)} 0)`}>
+          <g transform={`translate(0 ${fx2(s.markerY)})`}>
+            <rect x="0" y="0" width="14" height="7" fill={PAL.ink} />
+            <rect x="20" y="-1" width="2" height="9" fill={PAL.accentMid} />
+            <rect x="27" y="-1" width="2" height="9" fill={PAL.accentMid} />
+            <rect x="34" y="-1" width="2" height="9" fill={PAL.accentMid} />
+            <rect x="54" y="0" width="11" height="7" fill={PAL.accent} />
+          </g>
+          <text className="title" x="0" y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600"
+            letterSpacing={fx2(s.tLS)} fill={PAL.ink}>MAX TRETIKOV</text>
+          {s.subLines.map((ln, i) => (
+            <text key={i} x="0" y={fx2(s.subY + i * s.sSize * 1.35)} fontSize={fx2(s.sSize)}
+              letterSpacing={fx2(s.sLS)} fill={PAL.inkDim}>{ln}</text>
+          ))}
+        </g>
+      </svg>
     </div>
   );
 }
