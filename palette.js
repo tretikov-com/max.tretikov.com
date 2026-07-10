@@ -7,6 +7,7 @@ window.PALETTE = {
   // ── field: the large background — now the morphogenesis image over deep void ──
   bg:        "#0b0d14",          // deep navy-black: page backdrop + image fallback
   image:     "morphogenesis.webp",
+  activatedImage: "morphogenesis_activated.webp",
   ink:       "#f3f4f6",          // primary light marks, on the dark field (name, comb, dashes)
   inkDim:    "#aeb6c2",          // secondary light marks, on the dark field (subtitle)
   line:      "#c7ccd4",          // thin light rules, on the dark field (relief band)

@@ -24,7 +24,12 @@ const FACETS = [
   [0.54, 0.55], [0.54, 0.70], [0.76, 0.85], [1.00, 1.00],
 ];
 
-const SUBTITLE = "BIO ML ENGINEER / GENE CIRCUIT SYSTEMS / UNIT 01 / REV A";
+const NAV_ITEMS = [
+  { label: "PROJECTS", href: "#projects" },
+  { label: "BLOG", href: "#blog" },
+  { label: "PAPERS", href: "#papers" },
+  { label: "PROFILES", href: "#profiles" },
+];
 
 // intersection of line a→b with line c→d (used to miter offset segments)
 function lineInt(a, b, c, d) {
@@ -78,17 +83,21 @@ function seamXAtY(P, y) {
   return P[P.length - 1][0];
 }
 
-// greedily wrap the subtitle on its " / " separators to fit the open field
-function packLines(text, avail, charW) {
-  const tokens = text.split(" / ");
-  const lines = [];
-  let cur = "";
-  for (const tk of tokens) {
-    const cand = cur ? cur + " / " + tk : tk;
-    if (cur && cand.length * charW > avail) { lines.push(cur); cur = tk; }
-    else cur = cand;
+// Greedily wrap navigation items to fit the open field.
+function packNav(items, avail, charW, separatorSpan) {
+  const lines = [[]];
+  let width = 0;
+  for (const item of items) {
+    const itemWidth = item.label.length * charW;
+    const nextWidth = width ? width + separatorSpan + itemWidth : itemWidth;
+    if (width && nextWidth > avail) {
+      lines.push([item]);
+      width = itemWidth;
+    } else {
+      lines[lines.length - 1].push(item);
+      width = nextWidth;
+    }
   }
-  if (cur) lines.push(cur);
   return lines;
 }
 
@@ -121,7 +130,7 @@ function buildScene(W, H) {
   const sSize = clamp(tSize * 0.62, 10, 16);     // subtitle size
   const tLS = tSize * 0.32, sLS = sSize * 0.085;
 
-  let seam, wedge, edge, nsign, titleX, titleBaseY, faint, panel, depth;
+  let seam, wedge, edge, nsign, titleX, titleBaseY, faint, depth;
 
   if (!portrait) {
     const wedgeW = clamp(W * 0.26, 230, 520);
@@ -130,9 +139,8 @@ function buildScene(W, H) {
     edge = { axis: "y", v0: 0, v1: H };
     nsign = 1;                                    // relief grows right, into the field
     titleBaseY = clamp(H * 0.30, 150, 360);
-    titleX = seamXAtY(seam, titleBaseY) + clamp(W * 0.04, 32, 90);  // clear the white wedge with margin
-    faint = [wedgeW * 0.34, H * 0.16];
-    panel = `M${fx2(wedgeW * 0.20)},${fx2(H * 0.075)} q0,-12 12,-12 L${fx2(wedgeW * 0.60)},${fx2(H * 0.055)}`;
+    titleX = seamXAtY(seam, titleBaseY) + clamp(W * 0.058, 48, 116); // clear the white wedge with margin
+    faint = [wedgeW * 0.22, H * 0.10];
     depth = wedgeW;
   } else {
     const bandH = clamp(H * 0.24, 200, 460);
@@ -142,14 +150,20 @@ function buildScene(W, H) {
     edge = { axis: "x", v0: 0, v1: W };
     nsign = -1;                                   // relief grows down, into the field
     titleBaseY = bandH + clamp(H * 0.06, 34, 90);
-    titleX = m + pad;
-    faint = [W * 0.16, bandH * 0.42];
-    panel = `M${fx2(W * 0.30)},${fx2(bandH * 0.22)} q-12,0 -12,12 L${fx2(W * 0.285)},${fx2(bandH * 0.60)}`;
+    titleX = m + pad + clamp(W * 0.025, 10, 28);
+    faint = [W * 0.10, bandH * 0.28];
     depth = bandH;
   }
 
   const avail = Math.max(W - titleX - m, 120);
-  const subLines = packLines(SUBTITLE, avail, sSize * 0.62 + sLS);
+  const navCharW = sSize * 0.60 + sLS;
+  const navSeparatorMargin = sSize * 0.65;
+  const navSeparatorSpan = navSeparatorMargin * 2 + sSize * 0.60;
+  const navLines = packNav(NAV_ITEMS, avail, navCharW, navSeparatorSpan);
+
+  const bioChrome = portrait
+    ? [m + pad, H * 0.18]
+    : [m + pad, H - m - sSize * 0.7];
 
   return {
     W, H, portrait, m, pad, tSize, sSize, tLS, sLS,
@@ -157,7 +171,7 @@ function buildScene(W, H) {
     markerY: titleBaseY - tSize * 2.0,
     nameY: titleBaseY,
     subY: titleBaseY + tSize * 1.35,
-    subLines, faint, panel,
+    navLines, navCharW, navSeparatorSpan, navSeparatorMargin, faint, bioChrome,
   };
 }
 
@@ -170,6 +184,7 @@ function Frame() {
   const { w: W, h: H } = useViewport();
   const scene = useMemo(() => buildScene(W, H), [W, H]);
   const svgRef = useRef(null);
+  const [navActive, setNavActive] = useState(false);
 
   // relief band — imperative per-frame so resizes never thrash React
   useEffect(() => {
@@ -227,7 +242,9 @@ function Frame() {
 
         {/* base field — morphogenesis image over a deep fallback, cover-fit */}
         <rect x="0" y="0" width={W} height={H} fill={PAL.bg} />
-        <image href={PAL.image} x="0" y="0" width={W} height={H}
+        <image className="background-layer" href={PAL.image} x="0" y="0" width={W} height={H}
+          preserveAspectRatio="xMidYMid slice" />
+        <image className={`background-layer activated${navActive ? " is-active" : ""}`} href={PAL.activatedImage} x="0" y="0" width={W} height={H}
           preserveAspectRatio="xMidYMid slice" />
 
         {/* angular wedge — flipped to white "paper" */}
@@ -236,7 +253,6 @@ function Frame() {
         {/* blueprint detail, confined to the wedge */}
         <g clipPath="url(#wedgeclip)">
           <rect x="0" y="0" width={W} height={H} fill="url(#dots)" />
-          <path d={s.panel} fill="none" stroke={PAL.wedgeLine} strokeWidth="1.2" />
           <g stroke={PAL.wedgeLine} strokeWidth="2">
             <path d={`M${fx2(s.faint[0] - 11)},${fx2(s.faint[1])} h22 M${fx2(s.faint[0])},${fx2(s.faint[1] - 11)} v22`} />
           </g>
@@ -273,13 +289,25 @@ function Frame() {
 
         {/* bottom-left vertical text + ticks */}
         <g>
-          <text x={s.m} y={H * 0.52} fontSize="14" letterSpacing="4" fill={leftInk}
-            transform={`rotate(90 ${s.m} ${H * 0.52})`}>TRK-01- &#9733;</text>
+          <text x={s.m} y={H * 0.32} fontSize={fx2(s.sSize * 0.82)} letterSpacing={fx2(s.sLS)} fill={leftInk}
+            transform={`rotate(90 ${s.m} ${H * 0.32})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV Δ</text>
           <g fill={leftInk}>
-            <path d={`M${fx2(s.m + 26)},${fx2(H * 0.52 + 55)} l9,0 l-9,7 z`} />
-            <path d={`M${fx2(s.m + 26)},${fx2(H * 0.52 + 112)} l9,0 l-9,7 z`} />
+            <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 55)} l9,0 l-9,7 z`} />
+            <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 112)} l9,0 l-9,7 z`} />
           </g>
           <line x1={s.m - 4} y1={H - s.m - 85} x2={s.m - 4} y2={H - s.m} stroke={leftInk} strokeWidth="2" />
+
+          {/* Readable metadata chrome, deliberately kept on the dotted paper field. */}
+          <g transform={`translate(${fx2(s.bioChrome[0])} ${fx2(s.bioChrome[1])})`} fill={PAL.wedgeInk}>
+            {(() => {
+              const pad = s.sSize * 0.5;
+              const width = 15 * (s.sSize * 0.60 + s.sLS) + pad * 2;
+              return <>
+                <rect x="0" y={fx2(-s.sSize * 1.02)} width={fx2(width)} height={fx2(s.sSize * 1.55)} fill={PAL.wedge} stroke={PAL.wedgeLine} strokeWidth="1.1" />
+                <text x={fx2(pad)} y={fx2(s.sSize * 0.12)} fontSize={fx2(s.sSize)} letterSpacing={fx2(s.sLS)}>BIO ML ENGINEER</text>
+              </>;
+            })()}
+          </g>
         </g>
 
         {/* title block — marker ▪|||▪ + name + subtitle */}
@@ -291,12 +319,43 @@ function Frame() {
             <rect x="34" y="-1" width="2" height="9" fill={PAL.accentMid} />
             <rect x="54" y="0" width="11" height="7" fill={PAL.accent} />
           </g>
-          <text className="title" x="0" y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600"
-            letterSpacing={fx2(s.tLS)} fill={PAL.ink}>MAX TRETIKOV</text>
-          {s.subLines.map((ln, i) => (
-            <text key={i} x="0" y={fx2(s.subY + i * s.sSize * 1.35)} fontSize={fx2(s.sSize)}
-              letterSpacing={fx2(s.sLS)} fill={PAL.inkDim}>{ln}</text>
-          ))}
+          {(() => {
+            const titleUnit = s.tSize * 0.62 + s.tLS;
+            const maksWidth = 6 * titleUnit;
+            const maxWidth = 3 * titleUnit;
+            const bracketGap = s.tSize * 0.70;
+            const bracketLeft = maksWidth + bracketGap;
+            const maxX = bracketLeft + bracketGap + 3;
+            const bracketRight = maxX + maxWidth + bracketGap + 3;
+            const tretikovX = bracketRight + bracketGap - s.tSize * 0.11;
+            const bracketTop = s.nameY - s.tSize * 0.82;
+            const bracketBottom = s.nameY + s.tSize * 0.13;
+            return <>
+              <text className="title" x="0" y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600" letterSpacing={fx2(s.tLS)} fill={PAL.ink}>MAKSIM</text>
+              <path d={`M${fx2(bracketLeft + 5)},${fx2(bracketTop)} H${fx2(bracketLeft)} V${fx2(bracketBottom)} H${fx2(bracketLeft + 5)} M${fx2(bracketRight - 5)},${fx2(bracketTop)} H${fx2(bracketRight)} V${fx2(bracketBottom)} H${fx2(bracketRight - 5)}`} fill="none" stroke={PAL.ink} strokeWidth={fx2(Math.max(1.5, s.tSize * 0.085))} strokeLinecap="square" strokeLinejoin="miter" />
+              <text className="title" x={fx2(maxX)} y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600" letterSpacing={fx2(s.tLS)} fill={PAL.ink}>MAX</text>
+              <text className="title" x={fx2(tretikovX)} y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600" letterSpacing={fx2(s.tLS)} fill={PAL.ink}>TRETIKOV</text>
+            </>;
+          })()}
+          {s.navLines.map((line, lineIndex) => {
+            let x = 0;
+            const y = s.subY + lineIndex * s.sSize * 1.35;
+            return line.map((item, itemIndex) => {
+              const currentX = x;
+              x += item.label.length * s.navCharW;
+              const separator = itemIndex < line.length - 1;
+              const slashX = x + s.navSeparatorMargin + s.sSize * 0.045;
+              if (separator) x += s.navSeparatorSpan;
+              return (
+                <React.Fragment key={item.label}>
+                  <a href={item.href} className="nav-link" onPointerEnter={() => setNavActive(true)} onPointerLeave={() => setNavActive(false)} onFocus={() => setNavActive(true)} onBlur={() => setNavActive(false)}>
+                    <text x={fx2(currentX)} y={fx2(y)} fontSize={fx2(s.sSize)} letterSpacing={fx2(s.sLS)} fill={PAL.inkDim}>{item.label}</text>
+                  </a>
+                  {separator && <text x={fx2(slashX)} y={fx2(y)} fontSize={fx2(s.sSize)} letterSpacing="0" fill={PAL.inkDim}>/</text>}
+                </React.Fragment>
+              );
+            });
+          })}
         </g>
       </svg>
     </div>
