@@ -31,6 +31,11 @@ const NAV_ITEMS = [
   { label: "PROFILES", href: "#profiles" },
 ];
 
+const PROFILE_LINKS = [
+  { label: "GITHUB", href: "https://github.com/MaxTretikov" },
+  { label: "LINKEDIN", href: "https://www.linkedin.com/in/maxtretikov" },
+];
+
 // intersection of line a→b with line c→d (used to miter offset segments)
 function lineInt(a, b, c, d) {
   const x1 = a[0], y1 = a[1], x2 = b[0], y2 = b[1];
@@ -126,9 +131,13 @@ function buildScene(W, H) {
   const mn = Math.min(W, H);
   const pad = clamp(mn * 0.03, 14, 44);
   const m = clamp(mn * 0.045, 22, 64);          // corner margin
-  const tSize = clamp(mn * 0.026, 16, 30);       // title size
-  const sSize = clamp(tSize * 0.62, 10, 16);     // subtitle size
-  const tLS = tSize * 0.32, sLS = sSize * 0.085;
+  // The portrait plate needs more presence than the dense desktop caption.
+  // Slightly tighter title tracking preserves its single-line technical label.
+  const portraitTitleX = m + pad + clamp(W * 0.025, 10, 28);
+  const portraitTitleCap = (W - portraitTitleX - m - 9) / 16.74;
+  const tSize = portrait ? clamp(Math.min(mn * 0.050, portraitTitleCap), 14, 32) : clamp(mn * 0.026, 16, 30);
+  const sSize = portrait ? clamp(tSize * 0.68, 13, 19) : clamp(tSize * 0.62, 10, 16);
+  const tLS = tSize * (portrait ? 0.20 : 0.32), sLS = sSize * 0.085;
 
   let seam, wedge, edge, nsign, titleX, titleBaseY, faint, depth;
 
@@ -159,14 +168,20 @@ function buildScene(W, H) {
   const navCharW = sSize * 0.60 + sLS;
   const navSeparatorMargin = sSize * 0.65;
   const navSeparatorSpan = navSeparatorMargin * 2 + sSize * 0.60;
-  const navLines = packNav(NAV_ITEMS, avail, navCharW, navSeparatorSpan);
+  // Mobile navigation is intentionally arranged as a compact two-line index.
+  const navLines = portrait
+    ? [NAV_ITEMS.slice(0, 2), NAV_ITEMS.slice(2)]
+    : packNav(NAV_ITEMS, avail, navCharW, navSeparatorSpan);
 
+  const bioSize = sSize * 0.90;
+  const bioPad = bioSize * 0.5;
+  const bioWidth = 15 * (bioSize * 0.60 + sLS) + bioPad * 2;
   const bioChrome = portrait
-    ? [m + pad, H * 0.18]
+    ? [clamp(W * 0.62, m + pad, W - bioWidth - m), H * 0.10]
     : [m + pad, H - m - sSize * 0.7];
 
   return {
-    W, H, portrait, m, pad, tSize, sSize, tLS, sLS,
+    W, H, portrait, m, pad, tSize, sSize, bioSize, tLS, sLS,
     seam, wedge, edge, nsign, titleX, depth,
     markerY: titleBaseY - tSize * 2.0,
     nameY: titleBaseY,
@@ -180,11 +195,33 @@ function Cross({ x, y, s, c, w }) {
   return <path d={`M${fx2(x - s / 2)},${fx2(y)} h${fx2(s)} M${fx2(x)},${fx2(y - s / 2)} v${fx2(s)}`} stroke={c} strokeWidth={w || 2} />;
 }
 
+function profileMenuMetrics(scene) {
+  const fontSize = clamp(scene.sSize * 1.02, 14, 18);
+  const width = scene.portrait
+    ? clamp(scene.W - scene.m * 2 - 24, 286, 328)
+    : clamp(fontSize * 24, 350, 420);
+  return {
+    fontSize,
+    width,
+    height: width * (236 / 420) * (scene.portrait ? 1.06 : 1),
+  };
+}
+
 function Frame() {
   const { w: W, h: H } = useViewport();
   const scene = useMemo(() => buildScene(W, H), [W, H]);
   const svgRef = useRef(null);
   const [navActive, setNavActive] = useState(false);
+  const [profileMenu, setProfileMenu] = useState(null);
+
+  useEffect(() => {
+    if (!profileMenu) return undefined;
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") setProfileMenu(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [profileMenu]);
 
   // relief band — imperative per-frame so resizes never thrash React
   useEffect(() => {
@@ -232,7 +269,7 @@ function Frame() {
 
   return (
     <div id="stage">
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" onClick={() => setProfileMenu(null)}>
         <defs>
           <pattern id="dots" width="15" height="15" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.7" fill={PAL.wedgeDot} />
@@ -289,22 +326,24 @@ function Frame() {
 
         {/* bottom-left vertical text + ticks */}
         <g>
-          <text x={s.m} y={H * 0.32} fontSize={fx2(s.sSize * 0.82)} letterSpacing={fx2(s.sLS)} fill={leftInk}
-            transform={`rotate(90 ${s.m} ${H * 0.32})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV Δ</text>
-          <g fill={leftInk}>
-            <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 55)} l9,0 l-9,7 z`} />
-            <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 112)} l9,0 l-9,7 z`} />
+          <g className="edge-meta" opacity={profileMenu && s.portrait ? 0 : 1}>
+            <text x={s.m} y={H * (s.portrait ? 0.43 : 0.32)} fontSize={fx2(s.sSize * 0.62)} letterSpacing={fx2(s.sLS)} fill={leftInk}
+              transform={`rotate(90 ${s.m} ${H * (s.portrait ? 0.43 : 0.32)})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV Δ</text>
+            <g fill={leftInk}>
+              <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 55)} l9,0 l-9,7 z`} />
+              <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 112)} l9,0 l-9,7 z`} />
+            </g>
+            <line x1={s.m - 4} y1={H - s.m - 85} x2={s.m - 4} y2={H - s.m} stroke={leftInk} strokeWidth="2" />
           </g>
-          <line x1={s.m - 4} y1={H - s.m - 85} x2={s.m - 4} y2={H - s.m} stroke={leftInk} strokeWidth="2" />
 
           {/* Readable metadata chrome, deliberately kept on the dotted paper field. */}
           <g transform={`translate(${fx2(s.bioChrome[0])} ${fx2(s.bioChrome[1])})`} fill={PAL.wedgeInk}>
             {(() => {
-              const pad = s.sSize * 0.5;
-              const width = 15 * (s.sSize * 0.60 + s.sLS) + pad * 2;
+              const pad = s.bioSize * 0.5;
+              const width = 15 * (s.bioSize * 0.60 + s.sLS) + pad * 2;
               return <>
-                <rect x="0" y={fx2(-s.sSize * 1.02)} width={fx2(width)} height={fx2(s.sSize * 1.55)} fill={PAL.wedge} stroke={PAL.wedgeLine} strokeWidth="1.1" />
-                <text x={fx2(pad)} y={fx2(s.sSize * 0.12)} fontSize={fx2(s.sSize)} letterSpacing={fx2(s.sLS)}>BIO ML ENGINEER</text>
+                <rect x="0" y={fx2(-s.bioSize * 1.02)} width={fx2(width)} height={fx2(s.bioSize * 1.55)} fill={PAL.wedge} stroke={PAL.wedgeLine} strokeWidth="1.1" />
+                <text x={fx2(pad)} y={fx2(s.bioSize * 0.12)} fontSize={fx2(s.bioSize)} letterSpacing={fx2(s.sLS)}>BIO ML ENGINEER</text>
               </>;
             })()}
           </g>
@@ -327,7 +366,7 @@ function Frame() {
             const bracketLeft = maksWidth + bracketGap;
             const maxX = bracketLeft + bracketGap + 3;
             const bracketRight = maxX + maxWidth + bracketGap + 3;
-            const tretikovX = bracketRight + bracketGap - s.tSize * 0.11;
+            const tretikovX = bracketRight + bracketGap + 3;
             const bracketTop = s.nameY - s.tSize * 0.82;
             const bracketBottom = s.nameY + s.tSize * 0.13;
             return <>
@@ -343,12 +382,24 @@ function Frame() {
             return line.map((item, itemIndex) => {
               const currentX = x;
               x += item.label.length * s.navCharW;
-              const separator = itemIndex < line.length - 1;
+              const separator = itemIndex < line.length - 1 || (s.portrait && lineIndex === 0 && itemIndex === line.length - 1);
               const slashX = x + s.navSeparatorMargin + s.sSize * 0.045;
               if (separator) x += s.navSeparatorSpan;
               return (
                 <React.Fragment key={item.label}>
-                  <a href={item.href} className="nav-link" onPointerEnter={() => setNavActive(true)} onPointerLeave={() => setNavActive(false)} onFocus={() => setNavActive(true)} onBlur={() => setNavActive(false)}>
+                  <a href={item.href} className="nav-link" onPointerEnter={() => setNavActive(true)} onPointerLeave={() => setNavActive(false)} onFocus={() => setNavActive(true)} onBlur={() => setNavActive(false)} onClick={item.label === "PROFILES" ? (event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    if (profileMenu) { setProfileMenu(null); return; }
+                    const metrics = profileMenuMetrics(s);
+                    const anchorX = s.titleX + currentX - metrics.width * 0.075;
+                    const anchorY = y + s.sSize * 1.25;
+                    setNavActive(false);
+                    setProfileMenu({
+                      x: clamp(anchorX, s.m, W - metrics.width - s.m),
+                      y: clamp(anchorY, s.m, H - metrics.height - s.m),
+                    });
+                  } : undefined} tabIndex="0" aria-haspopup={item.label === "PROFILES" ? "menu" : undefined} aria-controls={item.label === "PROFILES" ? "profile-links-menu" : undefined} aria-expanded={item.label === "PROFILES" ? Boolean(profileMenu) : undefined}>
                     <text x={fx2(currentX)} y={fx2(y)} fontSize={fx2(s.sSize)} letterSpacing={fx2(s.sLS)} fill={PAL.inkDim}>{item.label}</text>
                   </a>
                   {separator && <text x={fx2(slashX)} y={fx2(y)} fontSize={fx2(s.sSize)} letterSpacing="0" fill={PAL.inkDim}>/</text>}
@@ -356,6 +407,32 @@ function Frame() {
               );
             });
           })}
+          {profileMenu && (() => {
+            const metrics = profileMenuMetrics(s);
+            const sx = metrics.width / 420;
+            const sy = metrics.height / 236;
+            return <g id="profile-links-menu" className="profile-menu" role="menu" aria-label="External profiles" transform={`translate(${fx2(profileMenu.x - s.titleX)} ${fx2(profileMenu.y)})`} onClick={(event) => event.stopPropagation()}>
+              <image href="profile-menu.svg?v=8" x="0" y="0" width={fx2(metrics.width)} height={fx2(metrics.height)} preserveAspectRatio="none" />
+              <g className="profile-menu-meta" fill={PAL.inkDim}>
+                <text x={fx2(80  * sx)} y={fx2(55 * sy)} fontSize={fx2(metrics.fontSize * 0.56)} letterSpacing={fx2(metrics.fontSize * 0.15)}>NET://PROFILE INDEX</text>
+                <text x={fx2(300 * sx)} y={fx2(50 * sy)} fontSize={fx2(metrics.fontSize * 0.48)} letterSpacing={fx2(metrics.fontSize * 0.08)}>β LINKS</text>
+              </g>
+              {PROFILE_LINKS.map((profile, profileIndex) => (
+                <a className="profile-link" role="menuitem" tabIndex="0" key={profile.label} href={profile.href} target="_blank" rel="noopener noreferrer">
+                  <path className="profile-link-hit" d={profileIndex === 0
+                    ? `M${fx2(63 * sx)},${fx2(73 * sy)} H${fx2(383 * sx)} L${fx2(402 * sx)},${fx2(92 * sy)} V${fx2(123 * sy)} H${fx2(81 * sx)} L${fx2(63 * sx)},${fx2(105 * sy)} Z`
+                    : `M${fx2(63 * sx)},${fx2(135 * sy)} H${fx2(381 * sx)} L${fx2(397 * sx)},${fx2(151 * sy)} V${fx2(181 * sy)} L${fx2(383 * sx)},${fx2(195 * sy)} H${fx2(63 * sx)} Z`} />
+                  <text className="profile-link-index" x={fx2(82 * sx)} y={fx2((105 + profileIndex * 62) * sy)} fontSize={fx2(metrics.fontSize * 0.58)} letterSpacing={fx2(metrics.fontSize * 0.10)}>0{profileIndex + 1}</text>
+                  <text className="profile-link-label" x={fx2(118 * sx)} y={fx2((107 + profileIndex * 62) * sy)} fontSize={fx2(metrics.fontSize)} letterSpacing={fx2(metrics.fontSize * 0.13)}>{profile.label}</text>
+                  <path className="profile-link-arrow" d={`M${fx2(358 * sx)},${fx2((98 + profileIndex * 62) * sy)} h${fx2(16 * sx)} m${fx2(-6 * sx)},${fx2(-6 * sy)} l${fx2(6 * sx)},${fx2(6 * sy)} l${fx2(-6 * sx)},${fx2(6 * sy)}`} />
+                </a>
+              ))}
+              <text className="profile-menu-footer" fontSize={fx2(metrics.fontSize * 0.52)} letterSpacing={fx2(metrics.fontSize * 0.06)}>
+                <tspan x={fx2(75 * sx)} y={fx2(207 * sy)}>EXT.LINK</tspan>
+                <tspan x={fx2(75 * sx)} y={fx2(220 * sy)}>SELECT</tspan>
+              </text>
+            </g>;
+          })()}
         </g>
       </svg>
     </div>
