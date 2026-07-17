@@ -1,4 +1,7 @@
 .DS_Store
+node_modules/
+dist/
+.vite/
 
 # Source/scratch art — generated assets, not referenced by index.html and not deployed
 morphogenesis*

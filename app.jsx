@@ -9,9 +9,12 @@
      • the relief band still animates imperatively in a React effect (the same
        per-frame approach the fixed version used) so resizes stay cheap.
    Landscape and portrait get distinct compositions. */
-const { useEffect, useMemo, useRef, useState } = React;
+import React from "react";
+import { createRoot } from "react-dom/client";
+import { PALETTE as PAL } from "./palette.js";
 
-const PAL = window.PALETTE;        // central palette — see palette.js
+const { useEffect, useMemo, useRef, useState } = React;
+const VaultApp = React.lazy(() => import("./src/vault/VaultApp.jsx"));
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fx2 = (n) => n.toFixed(1);
@@ -328,7 +331,7 @@ function Frame() {
         <g>
           <g className="edge-meta" opacity={profileMenu && s.portrait ? 0 : 1}>
             <text x={s.m} y={H * (s.portrait ? 0.43 : 0.32)} fontSize={fx2(s.sSize * 0.62)} letterSpacing={fx2(s.sLS)} fill={leftInk}
-              transform={`rotate(90 ${s.m} ${H * (s.portrait ? 0.43 : 0.32)})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV Δ</text>
+              transform={`rotate(90 ${s.m} ${H * (s.portrait ? 0.43 : 0.32)})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV {__GIT_REVISION__} Δ +{__GIT_ADDITIONS__} -{__GIT_DELETIONS__}</text>
             <g fill={leftInk}>
               <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 55)} l9,0 l-9,7 z`} />
               <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 112)} l9,0 l-9,7 z`} />
@@ -439,4 +442,22 @@ function Frame() {
   );
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(<Frame />);
+function Site() {
+  const [hash, setHash] = useState(() => window.location.hash);
+
+  useEffect(() => {
+    const onHashChange = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
+
+  if (hash === "#projects" || hash.startsWith("#projects/")) {
+    return <React.Suspense fallback={<div className="route-loading">LOADING PROJECT INDEX…</div>}>
+      <VaultApp hash={hash} />
+    </React.Suspense>;
+  }
+
+  return <Frame />;
+}
+
+createRoot(document.getElementById("root")).render(<Site />);

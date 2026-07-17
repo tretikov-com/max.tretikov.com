@@ -3,11 +3,11 @@
    directly; the stylesheet (styles.css) reads the matching CSS custom property,
    which this file publishes from the same values (camelCase -> --kebab-case).
    To re-skin the plate, edit only this file. */
-window.PALETTE = {
+export const PALETTE = {
   // ── field: the large background — now the morphogenesis image over deep void ──
   bg:        "#0b0d14",          // deep navy-black: page backdrop + image fallback
-  image:     "morphogenesis.webp",
-  activatedImage: "morphogenesis_activated.webp",
+  image:     new URL("./morphogenesis.webp", import.meta.url).href,
+  activatedImage: new URL("./morphogenesis_activated.webp", import.meta.url).href,
   ink:       "#f3f4f6",          // primary light marks, on the dark field (name, comb, dashes)
   inkDim:    "#aeb6c2",          // secondary light marks, on the dark field (subtitle)
   line:      "#c7ccd4",          // thin light rules, on the dark field (relief band)
@@ -25,6 +25,8 @@ window.PALETTE = {
   accentMid: "#9aa0a8",          // neutral mid ticks
 };
 
+window.PALETTE = PALETTE;
+
 /* Publish every #hex token as a CSS variable so styles.css stays in lockstep. */
 (function (P) {
   const root = document.documentElement.style;
@@ -33,4 +35,4 @@ window.PALETTE = {
       root.setProperty("--" + k.replace(/[A-Z]/g, (m) => "-" + m.toLowerCase()), P[k]);
     }
   }
-})(window.PALETTE);
+})(PALETTE);
