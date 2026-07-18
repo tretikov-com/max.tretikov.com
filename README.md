@@ -19,6 +19,7 @@ export const VAULT_SOURCES = [
     repo: "rlqf",
     ref: "main",
     root: "docs",
+    exclude: [".obsidian"],
     pollIntervalMs: 5 * 60 * 1000,
     webProxy: import.meta.env.VITE_GITHUB_WEB_PROXY || null,
   },

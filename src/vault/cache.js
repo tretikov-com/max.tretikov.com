@@ -33,12 +33,17 @@ function database() {
   return databasePromise;
 }
 
+function sourceExclusions(source) {
+  return [...(source?.exclude || [])].map(String).sort();
+}
+
 function repositoryMatchesSource(repository, source) {
   if (!source || typeof source === "string") return true;
   return repository.owner === source.owner
     && repository.repo === source.repo
     && repository.ref === (source.ref || "main")
-    && repository.root === (source.root || "");
+    && repository.root === (source.root || "")
+    && JSON.stringify(repository.exclude || []) === JSON.stringify(sourceExclusions(source));
 }
 
 export async function readActiveSnapshot(source) {
@@ -111,6 +116,7 @@ export async function saveSnapshot(source, snapshot, repositoryMetadata = {}) {
     repo: source.repo,
     ref: source.ref || "main",
     root: source.root || "",
+    exclude: sourceExclusions(source),
     activeCommit: snapshot.commitSha,
     checkedAt: Date.now(),
     ...repositoryMetadata,
@@ -132,6 +138,7 @@ export async function markRepositoryChecked(source, metadata = {}) {
     repo: source.repo,
     ref: source.ref || "main",
     root: source.root || "",
+    exclude: sourceExclusions(source),
     checkedAt: Date.now(),
     ...metadata,
   };
