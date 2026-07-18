@@ -4,7 +4,7 @@ import {
   buildVaultTree,
   createSnapshot,
   parseFrontmatter,
-  parseProjectsHash,
+  parseProjectsPath,
   projectHref,
   resolveAssetTarget,
   resolveNoteTarget,
@@ -33,9 +33,9 @@ test("vault tree sorts folders before files and preserves exact filenames", () =
 });
 
 test("project routes preserve nested note paths", () => {
-  const hash = projectHref("research notes", "A folder/Field #1.md");
-  assert.equal(hash, "#projects/research%20notes/A%20folder/Field%20%231.md");
-  assert.deepEqual(parseProjectsHash(hash), {
+  const pathname = projectHref("research notes", "A folder/Field #1.md");
+  assert.equal(pathname, "/projects/research%20notes/A%20folder/Field%20%231.md");
+  assert.deepEqual(parseProjectsPath(pathname), {
     sourceId: "research notes",
     notePath: "A folder/Field #1.md",
     anchor: null,
@@ -43,10 +43,39 @@ test("project routes preserve nested note paths", () => {
 });
 
 test("project routes separate note anchors from the encoded path", () => {
-  assert.deepEqual(parseProjectsHash("#projects/docs/Notes/Field.md#proof-sketch"), {
+  assert.deepEqual(parseProjectsPath(
+    "/projects/docs/Notes/Field.md",
+    "#proof-sketch",
+  ), {
     sourceId: "docs",
     notePath: "Notes/Field.md",
     anchor: "proof-sketch",
+  });
+});
+
+test("project index and trailing slashes resolve to the project root", () => {
+  assert.deepEqual(parseProjectsPath("/projects"), {
+    sourceId: null,
+    notePath: null,
+    anchor: null,
+  });
+  assert.deepEqual(parseProjectsPath("/projects/docs/"), {
+    sourceId: "docs",
+    notePath: null,
+    anchor: null,
+  });
+  assert.deepEqual(parseProjectsPath("/projects-old"), {
+    sourceId: null,
+    notePath: null,
+    anchor: null,
+  });
+});
+
+test("malformed route escapes do not crash path parsing", () => {
+  assert.deepEqual(parseProjectsPath("/projects/docs/Notes/%E0%A4%A.md"), {
+    sourceId: "docs",
+    notePath: "Notes/%E0%A4%A.md",
+    anchor: null,
   });
 });
 

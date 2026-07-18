@@ -89,6 +89,7 @@ npm test
 npm run dev
 ```
 
-`npm run build` writes the deployable site to `dist/`. The Pages workflow builds and
-deploys that directory on pushes to `main`; configure the repository's Pages source as
-**GitHub Actions** before its first run.
+`npm run build` writes the deployable site to `dist/`, including a `404.html` app shell
+so clean client routes such as `/projects/rlqf` survive direct GitHub Pages visits. The
+Pages workflow builds and deploys that directory on pushes to `main`; configure the
+repository's Pages source as **GitHub Actions** before its first run.

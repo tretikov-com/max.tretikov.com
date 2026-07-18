@@ -139,20 +139,20 @@ export function encodeNotePath(path) {
 }
 
 export function projectHref(sourceId, path) {
-  const base = `#projects/${encodeURIComponent(sourceId)}`;
+  const base = `/projects/${encodeURIComponent(sourceId)}`;
   return path ? `${base}/${encodeNotePath(path)}` : base;
 }
 
-export function parseProjectsHash(hash) {
-  const raw = String(hash || "").replace(/^#projects\/?/, "");
+export function parseProjectsPath(pathname, hash = "") {
+  const match = String(pathname || "").match(/^\/projects(?:\/(.*))?$/);
+  const raw = String(match?.[1] || "").replace(/\/+$/, "");
   if (!raw) return { sourceId: null, notePath: null, anchor: null };
-  const anchorIndex = raw.indexOf("#");
-  const route = anchorIndex === -1 ? raw : raw.slice(0, anchorIndex);
-  const anchor = anchorIndex === -1 ? null : decodeURIComponent(raw.slice(anchorIndex + 1));
-  const [sourcePart, ...pathParts] = route.split("/");
+  const encodedAnchor = String(hash || "").replace(/^#/, "");
+  const anchor = encodedAnchor ? safeDecode(encodedAnchor) : null;
+  const [sourcePart, ...pathParts] = raw.split("/");
   return {
-    sourceId: decodeURIComponent(sourcePart),
-    notePath: pathParts.length ? normalizePath(pathParts.map(decodeURIComponent).join("/")) : null,
+    sourceId: safeDecode(sourcePart),
+    notePath: pathParts.length ? normalizePath(pathParts.map(safeDecode).join("/")) : null,
     anchor,
   };
 }

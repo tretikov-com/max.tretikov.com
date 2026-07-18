@@ -9,13 +9,14 @@ import {
   syncSource,
 } from "./github.js";
 import {
-  parseProjectsHash,
+  parseProjectsPath,
   projectHref,
   rawGithubUrl,
   resolveAssetTarget,
   resolveNoteTarget,
   resolveRepositoryTarget,
 } from "./model.js";
+import { navigateTo } from "../navigation.js";
 import { configuredSources } from "./sources.js";
 
 const EXTERNAL_PROTOCOL = /^(?:[a-z]+:|\/\/)/i;
@@ -49,7 +50,7 @@ function sourceMetadata(source) {
 
 function ProjectsHeader({ detail, status }) {
   return <header className="vault-header">
-    <a className="vault-wordmark" href="#" aria-label="Return to Max Tretikov home">
+    <a className="vault-wordmark" href="/" aria-label="Return to Max Tretikov home">
       <span className="vault-wordmark-bracket">[</span>
       <span>MAX TRETIKOV</span>
       <span className="vault-wordmark-bracket">]</span>
@@ -76,7 +77,7 @@ function EmptyProjects() {
         track its branch head, download a complete commit snapshot, and keep the last
         good copy in IndexedDB.
       </p>
-      <a href="#" className="vault-action">RETURN TO FIELD <span>→</span></a>
+      <a href="/" className="vault-action">RETURN TO FIELD <span>→</span></a>
     </section>
   </main>;
 }
@@ -534,7 +535,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
 
       if (href.startsWith("#")) {
         event.preventDefault();
-        window.location.hash = `${projectHref(source.id, file.path)}${href}`;
+        navigateTo(`${projectHref(source.id, file.path)}${href}`);
         return;
       }
 
@@ -545,7 +546,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
       );
       if (target) {
         event.preventDefault();
-        window.location.hash = `${projectHref(source.id, target.path)}${target.anchor ? `#${target.anchor}` : ""}`;
+        navigateTo(`${projectHref(source.id, target.path)}${target.anchor ? `#${target.anchor}` : ""}`);
         return;
       }
 
@@ -557,7 +558,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
       );
       if (assetPath) {
         event.preventDefault();
-        window.location.hash = projectHref(source.id, assetPath);
+        navigateTo(projectHref(source.id, assetPath));
         return;
       }
 
@@ -832,7 +833,7 @@ function VaultView({ anchor, notePath, source }) {
       <h2>NO LOCAL SNAPSHOT IS AVAILABLE.</h2>
       <pre>{warning?.message}</pre>
       <button className="vault-action" type="button" onClick={() => setAttempt((value) => value + 1)}>RETRY CONNECTION <span>→</span></button>
-      <a className="vault-secondary-action" href="#projects">RETURN TO PROJECT INDEX</a>
+      <a className="vault-secondary-action" href="/projects">RETURN TO PROJECT INDEX</a>
     </div>
   </div>;
 
@@ -877,9 +878,9 @@ function VaultView({ anchor, notePath, source }) {
   </div>;
 }
 
-export default function VaultApp({ hash }) {
+export default function VaultApp({ route }) {
   const sources = useMemo(() => configuredSources(), []);
-  const { anchor, sourceId, notePath } = parseProjectsHash(hash);
+  const { anchor, sourceId, notePath } = parseProjectsPath(route.pathname, route.hash);
   const source = sources.find((candidate) => candidate.id === sourceId);
 
   useEffect(() => {
@@ -894,7 +895,7 @@ export default function VaultApp({ hash }) {
       <p className="vault-eyebrow">PROJECT LOOKUP FAILURE</p>
       <h2>THE REQUESTED VAULT IS NOT CONFIGURED.</h2>
       <code>{sourceId}</code>
-      <a className="vault-action" href="#projects">RETURN TO PROJECT INDEX <span>→</span></a>
+      <a className="vault-action" href="/projects">RETURN TO PROJECT INDEX <span>→</span></a>
     </div>
   </div>;
 

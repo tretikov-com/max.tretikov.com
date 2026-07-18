@@ -33,7 +33,7 @@ export default defineConfig(() => {
   const { revision, additions, deletions } = readGitMetadata();
 
   return {
-    base: "./",
+    base: "/",
     define: {
       __GIT_REVISION__: JSON.stringify(revision),
       __GIT_ADDITIONS__: JSON.stringify(additions),

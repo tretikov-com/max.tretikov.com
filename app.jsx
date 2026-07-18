@@ -12,6 +12,12 @@
 import React from "react";
 import { createRoot } from "react-dom/client";
 import { PALETTE as PAL } from "./palette.js";
+import {
+  migrateLegacyRoute,
+  NAVIGATION_EVENT,
+  navigateTo,
+  readRoute,
+} from "./src/navigation.js";
 
 const { useEffect, useMemo, useRef, useState } = React;
 const VaultApp = React.lazy(() => import("./src/vault/VaultApp.jsx"));
@@ -28,10 +34,10 @@ const FACETS = [
 ];
 
 const NAV_ITEMS = [
-  { label: "PROJECTS", href: "#projects" },
-  { label: "BLOG", href: "#blog" },
-  { label: "PAPERS", href: "#papers" },
-  { label: "PROFILES", href: "#profiles" },
+  { label: "PROJECTS", href: "/projects" },
+  { label: "BLOG", href: "/blog" },
+  { label: "PAPERS", href: "/papers" },
+  { label: "PROFILES", href: "/profiles" },
 ];
 
 const PROFILE_LINKS = [
@@ -415,7 +421,7 @@ function Frame() {
             const sx = metrics.width / 420;
             const sy = metrics.height / 236;
             return <g id="profile-links-menu" className="profile-menu" role="menu" aria-label="External profiles" transform={`translate(${fx2(profileMenu.x - s.titleX)} ${fx2(profileMenu.y)})`} onClick={(event) => event.stopPropagation()}>
-              <image href="profile-menu.svg?v=8" x="0" y="0" width={fx2(metrics.width)} height={fx2(metrics.height)} preserveAspectRatio="none" />
+              <image href="/profile-menu.svg?v=8" x="0" y="0" width={fx2(metrics.width)} height={fx2(metrics.height)} preserveAspectRatio="none" />
               <g className="profile-menu-meta" fill={PAL.inkDim}>
                 <text x={fx2(80  * sx)} y={fx2(55 * sy)} fontSize={fx2(metrics.fontSize * 0.56)} letterSpacing={fx2(metrics.fontSize * 0.15)}>NET://PROFILE INDEX</text>
                 <text x={fx2(300 * sx)} y={fx2(50 * sy)} fontSize={fx2(metrics.fontSize * 0.48)} letterSpacing={fx2(metrics.fontSize * 0.08)}>β LINKS</text>
@@ -443,17 +449,55 @@ function Frame() {
 }
 
 function Site() {
-  const [hash, setHash] = useState(() => window.location.hash);
+  const [route, setRoute] = useState(() => {
+    migrateLegacyRoute();
+    return readRoute();
+  });
 
   useEffect(() => {
-    const onHashChange = () => setHash(window.location.hash);
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    const onLocationChange = () => setRoute(readRoute());
+    const onDocumentClick = (event) => {
+      if (
+        event.defaultPrevented
+        || event.button !== 0
+        || event.metaKey
+        || event.ctrlKey
+        || event.shiftKey
+        || event.altKey
+      ) return;
+
+      const link = event.target.closest?.("a[href]");
+      if (!link || link.hasAttribute("download")) return;
+      const target = link.getAttribute("target");
+      if (target && target.toLowerCase() !== "_self") return;
+
+      const href = link.getAttribute("href");
+      if (!href || href.startsWith("#")) return;
+      const destination = new URL(href, window.location.href);
+      if (
+        destination.origin !== window.location.origin
+        || !/^https?:$/.test(destination.protocol)
+      ) return;
+
+      event.preventDefault();
+      navigateTo(destination.href);
+    };
+
+    window.addEventListener(NAVIGATION_EVENT, onLocationChange);
+    window.addEventListener("popstate", onLocationChange);
+    window.addEventListener("hashchange", onLocationChange);
+    document.addEventListener("click", onDocumentClick);
+    return () => {
+      window.removeEventListener(NAVIGATION_EVENT, onLocationChange);
+      window.removeEventListener("popstate", onLocationChange);
+      window.removeEventListener("hashchange", onLocationChange);
+      document.removeEventListener("click", onDocumentClick);
+    };
   }, []);
 
-  if (hash === "#projects" || hash.startsWith("#projects/")) {
+  if (route.pathname === "/projects" || route.pathname.startsWith("/projects/")) {
     return <React.Suspense fallback={<div className="route-loading">LOADING PROJECT INDEX…</div>}>
-      <VaultApp hash={hash} />
+      <VaultApp route={route} />
     </React.Suspense>;
   }
 
