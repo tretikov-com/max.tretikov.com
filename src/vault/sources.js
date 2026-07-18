@@ -7,7 +7,6 @@ export const VAULT_SOURCES = [
   {
     id: "rlqf",
     label: "RLQF",
-    description: "Repository documentation rendered as a live, commit-addressed Obsidian vault.",
     owner: "MaxTretikov",
     repo: "rlqf",
     ref: "main",
@@ -99,7 +98,6 @@ This section should not appear in the heading-scoped transclusion.
 export const DEMO_SOURCE = {
   id: "interface-test",
   label: "INTERFACE TEST VAULT",
-  description: "Local fixture: wikilinks, transclusions, callouts, math, and Mermaid.",
   kind: "inline",
   ref: "local",
   files: DEMO_FILES,

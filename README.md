@@ -14,7 +14,6 @@ export const VAULT_SOURCES = [
   {
     id: "rlqf",
     label: "RLQF",
-    description: "Repository documentation rendered as a live Obsidian vault.",
     owner: "MaxTretikov",
     repo: "rlqf",
     ref: "main",

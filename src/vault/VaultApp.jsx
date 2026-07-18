@@ -2,7 +2,12 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import "katex/dist/katex.min.css";
 import "./vault.css";
 import { readFileHistory, saveFileHistory } from "./cache.js";
-import { fetchFileHistory, loadSourceSnapshot, syncSource } from "./github.js";
+import {
+  fetchFileHistory,
+  fetchProjectSummary,
+  loadSourceSnapshot,
+  syncSource,
+} from "./github.js";
 import {
   parseProjectsHash,
   projectHref,
@@ -77,23 +82,59 @@ function EmptyProjects() {
 }
 
 function ProjectsIndex({ sources }) {
+  const [activeSourceId, setActiveSourceId] = useState(sources[0]?.id || null);
+  const [summaries, setSummaries] = useState({});
+  const activeSource = sources.find((source) => source.id === activeSourceId) || sources[0];
+
+  useEffect(() => {
+    const controller = new AbortController();
+    let live = true;
+
+    sources.forEach((source) => {
+      fetchProjectSummary(source, { signal: controller.signal })
+        .then((summary) => {
+          if (!live) return;
+          setSummaries((previous) => ({ ...previous, [source.id]: summary }));
+        })
+        .catch((error) => {
+          if (!live || error.name === "AbortError") return;
+          setSummaries((previous) => ({
+            ...previous,
+            [source.id]: source.kind === "inline"
+              ? source.label
+              : `${source.owner}/${source.repo}`,
+          }));
+        });
+    });
+
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, [sources]);
+
   return <div className="vault-screen">
     <ProjectsHeader detail={`${String(sources.length).padStart(2, "0")} VAULT${sources.length === 1 ? "" : "S"}`} />
     {sources.length === 0 ? <EmptyProjects /> : <main className="projects-index">
       <div className="projects-intro">
         <p className="vault-eyebrow">PUBLIC KNOWLEDGE SYSTEMS / LIVE REPOSITORIES</p>
         <h1>PROJECT<br />VAULTS</h1>
-        <p className="projects-intro-copy">
-          Commit-addressed Obsidian archives, rendered in place. Each vault is checked
-          against its public branch and retained locally between visits.
+        <p className="projects-intro-copy" id="project-summary">
+          {summaries[activeSource?.id] || "READING REPOSITORY DESCRIPTION…"}
         </p>
       </div>
       <div className="project-list">
-        {sources.map((source, index) => <a className="project-card" href={projectHref(source.id)} key={source.id}>
+        {sources.map((source, index) => <a
+          aria-describedby="project-summary"
+          className="project-card"
+          href={projectHref(source.id)}
+          key={source.id}
+          onFocus={() => setActiveSourceId(source.id)}
+          onMouseEnter={() => setActiveSourceId(source.id)}
+        >
           <span className="project-card-index">{String(index + 1).padStart(2, "0")}</span>
           <span className="project-card-body">
             <span className="project-card-title">{source.label}</span>
-            <span className="project-card-description">{source.description}</span>
             <span className="project-card-source">{sourceMetadata(source)}</span>
           </span>
           <span className="project-card-arrow" aria-hidden="true">↗</span>

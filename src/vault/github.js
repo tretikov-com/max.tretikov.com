@@ -3,12 +3,14 @@ import { createGitHubWebClient } from "./github-web.js";
 import {
   createSnapshot,
   isMarkdownPath,
+  parseFrontmatter,
   rawGithubUrl,
   stripSourceRoot,
 } from "./model.js";
 
 const API_VERSION = "2022-11-28";
 const DEFAULT_CONCURRENCY = 6;
+const projectSummaryCache = new Map();
 
 function apiHeaders(extra = {}) {
   return {
@@ -65,6 +67,76 @@ function splitCommitMessage(message) {
     message: subject.trim() || "Untitled commit",
     body: body.join("\n").trim(),
   };
+}
+
+export function extractMarkdownSummary(markdown) {
+  const { body } = parseFrontmatter(markdown);
+  const firstLine = body
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find((line) => (
+      line
+      && !line.startsWith("<!--")
+      && !line.startsWith("```")
+    ));
+
+  return String(firstLine || "")
+    .replace(/^#{1,6}\s+/, "")
+    .replace(/!\[([^\]]*)\]\([^)]+\)/g, "$1")
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/[*_`~]/g, "")
+    .trim();
+}
+
+async function fetchIndexSummary(source, signal) {
+  const root = String(source.root || "").replace(/^\/+|\/+$/g, "");
+  const candidates = ["index.md", "README.md", "index.markdown", "README.markdown"];
+
+  for (const filename of candidates) {
+    const repositoryPath = [root, filename].filter(Boolean).join("/");
+    const response = await fetch(rawGithubUrl(source, source.ref || "main", repositoryPath), { signal });
+    if (!response.ok) continue;
+    const summary = extractMarkdownSummary(await response.text());
+    if (summary) return summary;
+  }
+  return "";
+}
+
+export async function fetchProjectSummary(source, options = {}) {
+  if (source.kind === "inline") {
+    const index = source.files.find((file) => /(?:^|\/)(?:index|readme)\.md(?:own)?$/i.test(file.path));
+    return extractMarkdownSummary(index?.content || "") || source.label;
+  }
+
+  const cacheKey = [
+    source.owner,
+    source.repo,
+    source.ref || "main",
+    source.root || "",
+  ].join("/");
+  if (projectSummaryCache.has(cacheKey)) return projectSummaryCache.get(cacheKey);
+
+  const request = (async () => {
+    try {
+      const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}`;
+      const { data } = await githubRequest(url, { signal: options.signal });
+      const description = String(data.description || "").trim();
+      if (description) return description;
+    } catch (error) {
+      if (error.name === "AbortError") throw error;
+    }
+
+    const indexSummary = await fetchIndexSummary(source, options.signal);
+    return indexSummary || `${source.owner}/${source.repo}`;
+  })();
+
+  projectSummaryCache.set(cacheKey, request);
+  try {
+    return await request;
+  } catch (error) {
+    projectSummaryCache.delete(cacheKey);
+    throw error;
+  }
 }
 
 export function normalizeApiCommit(commit) {
