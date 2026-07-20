@@ -10,7 +10,7 @@
 }
 
 body[data-view="vault"]{overflow:auto;background:var(--vault-paper);color:var(--vault-ink);}
-body[data-view="vault"] #root{min-height:100%;}
+body[data-view="vault"] #root{height:auto;min-height:100%;overflow:visible;}
 .vault-screen{min-height:100vh;background:var(--vault-paper);font-family:"Space Mono",monospace;}
 .vault-screen *{box-sizing:border-box;}
 
