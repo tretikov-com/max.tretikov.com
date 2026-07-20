@@ -35,8 +35,8 @@ const FACETS = [
 
 const NAV_ITEMS = [
   { label: "PROJECTS", href: "/projects" },
-  { label: "BLOG", href: "/blog" },
-  { label: "PAPERS", href: "/papers" },
+  // { label: "BLOG", href: "/blog" },
+  // { label: "PAPERS", href: "/papers" },
   { label: "PROFILES", href: "/profiles" },
 ];
 
