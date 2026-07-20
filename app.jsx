@@ -209,7 +209,8 @@ function buildScene(W, H) {
   const bioPad = bioSize * 0.5;
   const bioWidth = 15 * (bioSize * 0.60 + chromeLS) + bioPad * 2;
   const bioChrome = portrait
-    ? [clamp(W * 0.62, m + pad, W - bioWidth - m), H * 0.10]
+    // Keep the enlarged role tag below the upper-right registration crosses.
+    ? [clamp(W * 0.62, m + pad, W - bioWidth - m), Math.max(H * 0.10, m + bioSize * 1.02 + 44)]
     : [m + pad, H - m - bioSize * 0.56];
 
   return {
