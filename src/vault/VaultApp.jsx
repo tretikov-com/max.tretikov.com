@@ -5,10 +5,13 @@ import { readFileHistory, saveFileHistory } from "./cache.js";
 import {
   fetchFileHistory,
   fetchProjectSummary,
+  fetchRepositoryHistory,
+  loadSnapshotAtCommit,
   loadSourceSnapshot,
   syncSource,
 } from "./github.js";
 import {
+  isFullCommitSha,
   parseProjectsPath,
   projectHref,
   rawGithubUrl,
@@ -148,7 +151,14 @@ function ProjectsIndex({ sources }) {
   </div>;
 }
 
-function FolderTreeNode({ node, sourceId, activePath, depth }) {
+function FolderTreeNode({
+  node,
+  sourceId,
+  activePath,
+  depth,
+  onFileSelect,
+  revision,
+}) {
   const containsActivePath = Boolean(
     activePath && (activePath === node.path || activePath.startsWith(`${node.path}/`)),
   );
@@ -166,18 +176,29 @@ function FolderTreeNode({ node, sourceId, activePath, depth }) {
         depth={depth + 1}
         key={`${child.type}:${child.path}`}
         node={child}
+        onFileSelect={onFileSelect}
+        revision={revision}
         sourceId={sourceId}
       />)}</ul>
     </details>
   </li>;
 }
 
-function FileTreeNode({ node, sourceId, activePath, depth = 0 }) {
+function FileTreeNode({
+  node,
+  sourceId,
+  activePath,
+  depth = 0,
+  onFileSelect,
+  revision,
+}) {
   if (node.type === "folder") {
     return <FolderTreeNode
       activePath={activePath}
       depth={depth}
       node={node}
+      onFileSelect={onFileSelect}
+      revision={revision}
       sourceId={sourceId}
     />;
   }
@@ -185,7 +206,16 @@ function FileTreeNode({ node, sourceId, activePath, depth = 0 }) {
   return <li>
     <a
       className={node.path === activePath ? "vault-tree-note is-active" : "vault-tree-note"}
-      href={projectHref(sourceId, node.path)}
+      href={projectHref(sourceId, node.path, { revision })}
+      onClick={(event) => {
+        if (
+          event.button === 0
+          && !event.metaKey
+          && !event.ctrlKey
+          && !event.shiftKey
+          && !event.altKey
+        ) onFileSelect?.();
+      }}
       title={node.path}
     >
       <span className="vault-tree-glyph" aria-hidden="true">
@@ -196,7 +226,22 @@ function FileTreeNode({ node, sourceId, activePath, depth = 0 }) {
   </li>;
 }
 
-function VaultSidebar({ snapshot, source, activePath }) {
+function VaultSidebar({
+  activePath,
+  buttonRef,
+  historyOpen,
+  onFileSelect,
+  onHistory,
+  revision,
+  snapshot,
+  source,
+}) {
+  const commit = snapshot.headCommit || {};
+  const message = commit.message || "Commit message unavailable";
+  const committedAt = commit.committedAt || commit.authoredAt || snapshot.committedAt;
+  const stateLabel = revision ? "CHECKED OUT" : "HEAD COMMIT";
+  const commitLabel = formatCommit(snapshot.commitSha);
+
   return <aside className="vault-sidebar">
     <div className="vault-sidebar-head">
       <span>{source.root ? `${source.root} / TREE` : "FILE SYSTEM"}</span>
@@ -208,17 +253,29 @@ function VaultSidebar({ snapshot, source, activePath }) {
           activePath={activePath}
           key={`${node.type}:${node.path}`}
           node={node}
+          onFileSelect={onFileSelect}
+          revision={revision}
           sourceId={source.id}
         />)}
       </ul>
     </nav>
-    <div className="vault-sidebar-foot">
-      <span>COMMIT</span>
-      <strong>{formatCommit(snapshot.commitSha)}</strong>
-      {snapshot.committedAt && <time dateTime={snapshot.committedAt}>
-        {new Date(snapshot.committedAt).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "2-digit" }).toUpperCase()}
+    <button
+      aria-controls="vault-repository-history"
+      aria-expanded={historyOpen}
+      aria-label={`Open repository history. ${stateLabel}: ${message}, ${commitLabel}`}
+      className="vault-sidebar-foot"
+      onClick={onHistory}
+      ref={buttonRef}
+      type="button"
+    >
+      <span>{stateLabel}</span>
+      <strong>{commitLabel}</strong>
+      <span className="vault-sidebar-commit-message">{message}</span>
+      {committedAt && <time dateTime={committedAt}>
+        {formatHistoryDate(committedAt)}
       </time>}
-    </div>
+      <span className="vault-sidebar-history-affordance">VIEW HISTORY →</span>
+    </button>
   </aside>;
 }
 
@@ -384,7 +441,10 @@ function useSelectedFileHistory(source, snapshot, file) {
         return;
       }
 
-      const fetched = await fetchFileHistory(source, file.repoPath, {
+      const requestSource = source.kind === "inline"
+        ? source
+        : { ...source, ref: snapshot.commitSha };
+      const fetched = await fetchFileHistory(requestSource, file.repoPath, {
         headSha: snapshot.commitSha,
         page: 1,
         signal: controller.signal,
@@ -458,7 +518,10 @@ function useSelectedFileHistory(source, snapshot, file) {
         ? null
         : await readFileHistory(source.id, file.repoPath, snapshot.commitSha, pageKey);
       if (!next) {
-        next = await fetchFileHistory(source, file.repoPath, {
+        const requestSource = source.kind === "inline"
+          ? source
+          : { ...source, ref: snapshot.commitSha };
+        next = await fetchFileHistory(requestSource, file.repoPath, {
           headSha: snapshot.commitSha,
           page: history.transport === "github-api" ? pageKey : undefined,
           after: history.transport === "github-web" ? pageKey : undefined,
@@ -499,27 +562,184 @@ function useSelectedFileHistory(source, snapshot, file) {
   return { ...history, loadMore };
 }
 
-function CommitControl({ history, onOpen }) {
+function useRepositoryHistory(source, headSnapshot, enabled) {
+  const [history, setHistory] = useState({
+    status: "idle",
+    commits: [],
+    pagination: { hasNextPage: false },
+    error: null,
+    moreError: null,
+    loadingMore: false,
+    transport: null,
+    requestKey: null,
+  });
+  const moreControllerRef = useRef(null);
+
+  useEffect(() => {
+    moreControllerRef.current?.abort();
+    if (!enabled || !headSnapshot?.commitSha) {
+      setHistory({
+        status: "idle",
+        commits: [],
+        pagination: { hasNextPage: false },
+        error: null,
+        moreError: null,
+        loadingMore: false,
+        transport: null,
+        requestKey: null,
+      });
+      return undefined;
+    }
+
+    let live = true;
+    const controller = new AbortController();
+    const requestKey = `${source.id}@${headSnapshot.commitSha}:repository`;
+    setHistory({
+      status: "loading",
+      commits: [],
+      pagination: { hasNextPage: false },
+      error: null,
+      moreError: null,
+      loadingMore: false,
+      transport: null,
+      requestKey,
+    });
+
+    fetchRepositoryHistory(source, {
+      headSha: headSnapshot.commitSha,
+      page: 1,
+      signal: controller.signal,
+    }).then((result) => {
+      if (!live) return;
+      setHistory({
+        ...result,
+        headSha: result.headSha || headSnapshot.commitSha,
+        status: "ready",
+        error: null,
+        moreError: null,
+        loadingMore: false,
+        requestKey,
+      });
+    }).catch((error) => {
+      if (!live || error.name === "AbortError") return;
+      setHistory({
+        status: "error",
+        commits: [],
+        pagination: { hasNextPage: false },
+        error,
+        moreError: null,
+        loadingMore: false,
+        transport: null,
+        requestKey,
+      });
+    });
+
+    return () => {
+      live = false;
+      controller.abort();
+      moreControllerRef.current?.abort();
+    };
+  }, [
+    enabled,
+    headSnapshot?.commitSha,
+    source.id,
+    source.kind,
+    source.ref,
+    source.webProxy,
+  ]);
+
+  const loadMore = async () => {
+    if (
+      history.status !== "ready"
+      || history.loadingMore
+      || !history.pagination?.hasNextPage
+    ) return;
+
+    const pageKey = history.transport === "github-web"
+      ? history.pagination.endCursor
+      : history.pagination.nextPage;
+    if (pageKey === null || pageKey === undefined || pageKey === "") return;
+
+    const requestKey = `${source.id}@${headSnapshot.commitSha}:repository`;
+    const controller = new AbortController();
+    moreControllerRef.current?.abort();
+    moreControllerRef.current = controller;
+    setHistory((previous) => previous.requestKey === requestKey
+      ? { ...previous, loadingMore: true, moreError: null }
+      : previous);
+
+    try {
+      const next = await fetchRepositoryHistory(source, {
+        headSha: headSnapshot.commitSha,
+        page: history.transport === "github-api" ? pageKey : undefined,
+        after: history.transport === "github-web" ? pageKey : undefined,
+        signal: controller.signal,
+      });
+
+      setHistory((previous) => {
+        if (previous.requestKey !== requestKey) return previous;
+        const commits = [...previous.commits, ...(next.commits || [])];
+        const uniqueCommits = commits.filter((commit, index) => (
+          commits.findIndex((candidate) => candidate.sha === commit.sha) === index
+        ));
+        return {
+          ...previous,
+          commits: uniqueCommits,
+          groups: [...(previous.groups || []), ...(next.groups || [])],
+          pagination: next.pagination || { hasNextPage: false },
+          loadingMore: false,
+          moreError: null,
+        };
+      });
+    } catch (error) {
+      if (error.name === "AbortError") return;
+      setHistory((previous) => previous.requestKey === requestKey
+        ? { ...previous, loadingMore: false, moreError: error }
+        : previous);
+    } finally {
+      if (moreControllerRef.current === controller) moreControllerRef.current = null;
+    }
+  };
+
+  return { ...history, loadMore };
+}
+
+function CommitControl({ expanded, history, onOpen }) {
   const latest = history.commits?.[0];
   const label = history.status === "loading"
     ? "RESOLVING FILE COMMIT"
     : latest?.message || (history.status === "error" ? "HISTORY UNAVAILABLE" : "NO FILE COMMITS");
   const sha = latest?.shortSha || latest?.sha?.slice(0, 7) || "—";
 
-  return <button className="vault-commit-control" type="button" onClick={onOpen}>
+  return <button
+    aria-controls="vault-file-history"
+    aria-expanded={expanded}
+    className="vault-commit-control"
+    type="button"
+    onClick={onOpen}
+  >
     <span>{label}</span>
     <strong>{sha}</strong>
   </button>;
 }
 
-function DocumentMeta({ file, history, onHistory }) {
+function DocumentMeta({ file, history, historyOpen, onHistory }) {
   return <div className="vault-document-meta">
     <span className="vault-document-path">{file.path}</span>
-    <CommitControl history={history} onOpen={onHistory} />
+    <CommitControl expanded={historyOpen} history={history} onOpen={onHistory} />
   </div>;
 }
 
-function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
+function VaultReader({
+  anchor,
+  file,
+  history,
+  historyOpen,
+  onHistory,
+  revision,
+  snapshot,
+  source,
+}) {
   const articleRef = useRef(null);
   const rendered = useRenderedNote(file);
 
@@ -535,7 +755,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
 
       if (href.startsWith("#")) {
         event.preventDefault();
-        navigateTo(`${projectHref(source.id, file.path)}${href}`);
+        navigateTo(`${projectHref(source.id, file.path, { revision })}${href}`);
         return;
       }
 
@@ -546,7 +766,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
       );
       if (target) {
         event.preventDefault();
-        navigateTo(`${projectHref(source.id, target.path)}${target.anchor ? `#${target.anchor}` : ""}`);
+        navigateTo(`${projectHref(source.id, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`);
         return;
       }
 
@@ -558,7 +778,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
       );
       if (assetPath) {
         event.preventDefault();
-        navigateTo(projectHref(source.id, assetPath));
+        navigateTo(projectHref(source.id, assetPath, { revision }));
         return;
       }
 
@@ -627,7 +847,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
       cancelled = true;
       article.removeEventListener("click", click);
     };
-  }, [anchor, file.path, rendered.html, snapshot, source]);
+  }, [anchor, file.path, rendered.html, revision, snapshot, source]);
 
   if (rendered.error) return <div className="vault-reader-error">
     <p className="vault-eyebrow">RENDER FAILURE</p>
@@ -638,7 +858,12 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
   if (!rendered.html) return <div className="vault-reader-loading">TRANSFORMING NOTE / QUARTZ OFM…</div>;
 
   return <>
-    <DocumentMeta file={file} history={history} onHistory={onHistory} />
+    <DocumentMeta
+      file={file}
+      history={history}
+      historyOpen={historyOpen}
+      onHistory={onHistory}
+    />
     <article
       className="vault-article"
       dangerouslySetInnerHTML={{ __html: rendered.html }}
@@ -647,7 +872,7 @@ function VaultReader({ anchor, file, history, onHistory, snapshot, source }) {
   </>;
 }
 
-function AssetReader({ file, history, onHistory, snapshot, source }) {
+function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }) {
   const extension = file.path.split(".").pop()?.toUpperCase() || "FILE";
   const rawUrl = source.kind === "inline"
     ? null
@@ -655,7 +880,12 @@ function AssetReader({ file, history, onHistory, snapshot, source }) {
   const image = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(file.path);
 
   return <>
-    <DocumentMeta file={file} history={history} onHistory={onHistory} />
+    <DocumentMeta
+      file={file}
+      history={history}
+      historyOpen={historyOpen}
+      onHistory={onHistory}
+    />
     <div className="vault-asset">
       <p className="vault-eyebrow">REPOSITORY OBJECT / {extension}</p>
       <h1>{file.path.split("/").at(-1)}</h1>
@@ -672,81 +902,197 @@ function AssetReader({ file, history, onHistory, snapshot, source }) {
   </>;
 }
 
-function FileHistoryPanel({ file, history, onClose, snapshot, source }) {
-  const githubHistoryUrl = source.kind === "inline"
-    ? null
-    : `https://github.com/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits/${encodeURIComponent(source.ref || "main")}/${file.repoPath.split("/").map(encodeURIComponent).join("/")}`;
-
-  return <div className="vault-history">
-    <div className="vault-history-head">
-      <div>
-        <p className="vault-eyebrow">FILE REVISION LOG / {history.transport || "PENDING"}</p>
-        <h1>{file.path.split("/").at(-1)}</h1>
-        <code>{file.path}</code>
-      </div>
-      <button type="button" onClick={onClose}>← RETURN TO FILE</button>
-    </div>
-
-    {history.status === "loading" && <div className="vault-history-state">LOADING COMMIT GROUPS…</div>}
-    {history.status === "error" && <div className="vault-history-state is-error">
+function CommitHistory({
+  emptyLabel,
+  githubHistoryUrl,
+  history,
+  renderAction,
+}) {
+  return <>
+    {history.status === "loading" && <div
+      aria-live="polite"
+      className="vault-history-state"
+      role="status"
+    >
+      LOADING COMMIT GROUPS…
+    </div>}
+    {history.status === "error" && <div className="vault-history-state is-error" role="alert">
       <strong>HISTORY REQUEST FAILED</strong>
       <span>{history.error?.message}</span>
       {githubHistoryUrl && <a href={githubHistoryUrl} rel="noreferrer" target="_blank">OPEN ON GITHUB ↗</a>}
     </div>}
     {history.status === "ready" && history.commits.length === 0 && <div className="vault-history-state">
-      NO COMMITS WERE RETURNED FOR THIS PATH.
+      {emptyLabel}
     </div>}
 
     {history.commits?.length > 0 && <ol className="vault-history-list">
-      {history.commits.map((commit, index) => <li key={commit.sha || `${commit.message}:${index}`}>
-        <div className="vault-history-index">{String(index + 1).padStart(2, "0")}</div>
-        <div className="vault-history-entry">
-          <div className="vault-history-message">
-            <h2>{commit.message}</h2>
-            {commit.body && <p>{commit.body}</p>}
+      {history.commits.map((commit, index) => {
+        const shortSha = (commit.shortSha || commit.sha?.slice(0, 7) || "LOCAL").toUpperCase();
+        return <li key={commit.sha || `${commit.message}:${index}`}>
+          <div className="vault-history-index">{String(index + 1).padStart(2, "0")}</div>
+          <div className="vault-history-entry">
+            <div className="vault-history-message">
+              <h2>{commit.message}</h2>
+              {commit.body && <p>{commit.body}</p>}
+            </div>
+            <div className="vault-history-facts">
+              <span>{commit.author?.name || commit.authors?.[0]?.name || commit.authors?.[0]?.login || "UNKNOWN AUTHOR"}</span>
+              <time dateTime={commit.committedAt || commit.authoredAt || undefined}>
+                {formatHistoryDate(commit.committedAt || commit.authoredAt)}
+              </time>
+              <div className="vault-history-entry-actions">
+                {renderAction?.(commit)}
+                {commit.url
+                  ? <a
+                    aria-label={`Open commit ${shortSha} on GitHub`}
+                    href={commit.url}
+                    rel="noreferrer"
+                    target="_blank"
+                  >
+                    GITHUB / {shortSha} ↗
+                  </a>
+                  : <strong>{shortSha}</strong>}
+              </div>
+            </div>
           </div>
-          <div className="vault-history-facts">
-            <span>{commit.author?.name || commit.authors?.[0]?.name || commit.authors?.[0]?.login || "UNKNOWN AUTHOR"}</span>
-            <time dateTime={commit.committedAt || commit.authoredAt || undefined}>
-              {formatHistoryDate(commit.committedAt || commit.authoredAt)}
-            </time>
-            {commit.url
-              ? <a href={commit.url} rel="noreferrer" target="_blank">{(commit.shortSha || commit.sha?.slice(0, 7)).toUpperCase()} ↗</a>
-              : <strong>{(commit.shortSha || commit.sha?.slice(0, 7) || "LOCAL").toUpperCase()}</strong>}
-          </div>
-        </div>
-      </li>)}
+        </li>;
+      })}
     </ol>}
 
     {history.pagination?.hasNextPage && <div className="vault-history-more">
       <button type="button" disabled={history.loadingMore} onClick={history.loadMore}>
         {history.loadingMore ? "LOADING NEXT COMMIT GROUP…" : "LOAD EARLIER COMMITS ↓"}
       </button>
-      {history.moreError && <span>{history.moreError.message}</span>}
+      {history.moreError && <span aria-live="polite">{history.moreError.message}</span>}
     </div>}
+  </>;
+}
+
+function FileHistoryPanel({ file, history, onClose, snapshot, source }) {
+  const githubHistoryUrl = source.kind === "inline"
+    ? null
+    : `https://github.com/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits/${encodeURIComponent(snapshot.commitSha)}/${file.repoPath.split("/").map(encodeURIComponent).join("/")}`;
+
+  return <div
+    aria-busy={history.status === "loading"}
+    aria-labelledby="vault-file-history-title"
+    className="vault-history"
+    id="vault-file-history"
+    role="region"
+  >
+    <div className="vault-history-head">
+      <div>
+        <p className="vault-eyebrow">FILE REVISION LOG / {history.transport || "PENDING"}</p>
+        <h1 id="vault-file-history-title">{file.path.split("/").at(-1)}</h1>
+        <code>{file.path}</code>
+      </div>
+      <button type="button" onClick={onClose}>← RETURN TO FILE</button>
+    </div>
+
+    <CommitHistory
+      emptyLabel="NO COMMITS WERE RETURNED FOR THIS PATH."
+      githubHistoryUrl={githubHistoryUrl}
+      history={history}
+    />
 
     <div className="vault-history-foot">
-      <span>SNAPSHOT HEAD / {formatCommit(snapshot.commitSha)}</span>
+      <span>VIEWED SNAPSHOT / {formatCommit(snapshot.commitSha)}</span>
       {githubHistoryUrl && <a href={githubHistoryUrl} rel="noreferrer" target="_blank">VERIFY ON GITHUB ↗</a>}
     </div>
   </div>;
 }
 
-function MissingNote({ path, source }) {
+function RepositoryHistoryPanel({
+  currentSnapshot,
+  headSnapshot,
+  history,
+  onClose,
+  onSelect,
+  panelRef,
+  revision,
+  source,
+}) {
+  const githubHistoryUrl = source.kind === "inline"
+    ? null
+    : `https://github.com/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits/${encodeURIComponent(source.ref || "main")}`;
+  const currentSha = currentSnapshot.commitSha?.toLowerCase();
+  const headSha = headSnapshot.commitSha?.toLowerCase();
+  const checkedOut = Boolean(revision);
+
+  return <div
+    aria-busy={history.status === "loading"}
+    aria-labelledby="vault-repository-history-title"
+    className="vault-history"
+    id="vault-repository-history"
+    ref={panelRef}
+    role="region"
+    tabIndex={-1}
+  >
+    <div className="vault-history-head">
+      <div>
+        <p className="vault-eyebrow">BRANCH REVISION LOG / {history.transport || "PENDING"}</p>
+        <h1 id="vault-repository-history-title">{source.label} TREE</h1>
+        <code>{sourceMetadata(source)}</code>
+      </div>
+      <div className="vault-history-head-actions">
+        {checkedOut && <button type="button" onClick={() => onSelect(null)}>RETURN TO HEAD</button>}
+        <button type="button" onClick={onClose}>← RETURN TO CURRENT FILE</button>
+      </div>
+    </div>
+
+    <CommitHistory
+      emptyLabel="NO COMMITS WERE RETURNED FOR THIS BRANCH."
+      githubHistoryUrl={githubHistoryUrl}
+      history={history}
+      renderAction={(commit) => {
+        const commitSha = commit.sha?.toLowerCase();
+        const isCurrent = commitSha === currentSha;
+        const isHead = commitSha === headSha;
+        const label = isCurrent ? "CURRENT" : isHead ? "RETURN TO HEAD" : "CHECK OUT";
+        return <button
+          aria-current={isCurrent ? "true" : undefined}
+          aria-label={`${label === "CHECK OUT" ? "Check out repository tree at" : label.toLowerCase()} commit ${commit.sha}`}
+          className="vault-history-checkout"
+          disabled={isCurrent || !isFullCommitSha(commit.sha)}
+          onClick={() => onSelect(isHead ? null : commit.sha)}
+          type="button"
+        >
+          {label}
+        </button>;
+      }}
+    />
+
+    <div className="vault-history-foot">
+      <span>VIEWING / {formatCommit(currentSnapshot.commitSha)}</span>
+      <span>HEAD / {formatCommit(headSnapshot.commitSha)}</span>
+      {githubHistoryUrl && <a href={githubHistoryUrl} rel="noreferrer" target="_blank">VERIFY BRANCH ON GITHUB ↗</a>}
+    </div>
+  </div>;
+}
+
+function MissingNote({ path, revision, source }) {
   return <div className="vault-reader-error">
     <p className="vault-eyebrow">PATH RESOLUTION FAILURE</p>
     <h2>NOTE NOT FOUND.</h2>
     <code>{path}</code>
-    <a className="vault-action" href={projectHref(source.id)}>OPEN VAULT ROOT <span>→</span></a>
+    <a className="vault-action" href={projectHref(source.id, null, { revision })}>OPEN VAULT ROOT <span>→</span></a>
   </div>;
 }
 
-function VaultView({ anchor, notePath, source }) {
-  const [snapshot, setSnapshot] = useState(null);
+function VaultView({ anchor, notePath, revision, source }) {
+  const [headSnapshot, setHeadSnapshot] = useState(null);
+  const [checkout, setCheckout] = useState({
+    revision: null,
+    status: "idle",
+    snapshot: null,
+    error: null,
+  });
   const [phase, setPhase] = useState("loading");
   const [warning, setWarning] = useState(null);
   const [attempt, setAttempt] = useState(0);
-  const [historyOpen, setHistoryOpen] = useState(false);
+  const [historyMode, setHistoryMode] = useState(null);
+  const repositoryButtonRef = useRef(null);
+  const repositoryPanelRef = useRef(null);
 
   useEffect(() => {
     let live = true;
@@ -765,7 +1111,7 @@ function VaultView({ anchor, notePath, source }) {
         if (!live) return;
         if (fresh) {
           currentSnapshot = fresh;
-          setSnapshot(fresh);
+          setHeadSnapshot(fresh);
         }
         setWarning(null);
         setPhase("ready");
@@ -782,7 +1128,7 @@ function VaultView({ anchor, notePath, source }) {
       try {
         currentSnapshot = await loadSourceSnapshot(source);
         if (!live) return;
-        if (currentSnapshot) setSnapshot(currentSnapshot);
+        if (currentSnapshot) setHeadSnapshot(currentSnapshot);
         await refresh();
         if (live && source.kind !== "inline") {
           pollTimer = window.setInterval(refresh, source.pollIntervalMs || 5 * 60 * 1000);
@@ -800,24 +1146,153 @@ function VaultView({ anchor, notePath, source }) {
     };
   }, [source, attempt]);
 
-  const selectedPath = notePath || snapshot?.initialNote;
+  const headAvailable = Boolean(headSnapshot);
+  useEffect(() => {
+    if (!revision) {
+      setCheckout({
+        revision: null,
+        status: "idle",
+        snapshot: null,
+        error: null,
+      });
+      return undefined;
+    }
+    if (!headAvailable) {
+      setCheckout({
+        revision,
+        status: "waiting",
+        snapshot: null,
+        error: null,
+      });
+      return undefined;
+    }
+
+    const requestedRevision = revision.toLowerCase();
+    if (headSnapshot.commitSha?.toLowerCase() === requestedRevision) {
+      setCheckout({
+        revision: requestedRevision,
+        status: "ready",
+        snapshot: headSnapshot,
+        error: null,
+      });
+      return undefined;
+    }
+
+    let live = true;
+    const controller = new AbortController();
+    setCheckout({
+      revision: requestedRevision,
+      status: "loading",
+      snapshot: null,
+      error: null,
+    });
+
+    loadSnapshotAtCommit(source, requestedRevision, headSnapshot, {
+      signal: controller.signal,
+    }).then((snapshot) => {
+      if (!live) return;
+      if (snapshot?.commitSha?.toLowerCase() !== requestedRevision) {
+        throw new Error("GitHub returned a different commit than the requested revision.");
+      }
+      setCheckout({
+        revision: requestedRevision,
+        status: "ready",
+        snapshot,
+        error: null,
+      });
+    }).catch((error) => {
+      if (!live || error.name === "AbortError") return;
+      setCheckout({
+        revision: requestedRevision,
+        status: "error",
+        snapshot: null,
+        error,
+      });
+    });
+
+    return () => {
+      live = false;
+      controller.abort();
+    };
+  }, [headAvailable, revision, source]);
+
+  const snapshot = revision ? checkout.snapshot : headSnapshot;
+  const requestedFile = snapshot && notePath ? findFile(snapshot, notePath) : null;
+  const selectedPath = revision && notePath && !requestedFile
+    ? snapshot?.initialNote
+    : notePath || snapshot?.initialNote;
   const file = snapshot && selectedPath ? findFile(snapshot, selectedPath) : null;
   const history = useSelectedFileHistory(source, snapshot, file);
+  const repositoryHistory = useRepositoryHistory(
+    source,
+    headSnapshot,
+    historyMode === "repository",
+  );
 
   useEffect(() => {
-    setHistoryOpen(false);
+    setHistoryMode(null);
     if (file?.path) window.scrollTo({ top: 0, left: 0 });
-  }, [file?.path]);
+  }, [file?.path, snapshot?.commitSha]);
 
-  const status = phase === "checking"
-    ? { label: snapshot ? "CHECKING HEAD" : "FETCHING VAULT", tone: "active" }
-    : phase === "stale"
-      ? { label: "CACHED / OFFLINE", tone: "warn" }
-      : phase === "error"
-        ? { label: "SOURCE ERROR", tone: "warn" }
-        : { label: "SNAPSHOT READY", tone: "ready" };
+  useEffect(() => {
+    if (
+      !revision
+      || checkout.status !== "ready"
+      || !snapshot
+      || !notePath
+      || requestedFile
+      || !snapshot.initialNote
+    ) return;
+    navigateTo(projectHref(source.id, snapshot.initialNote, { revision }), { replace: true });
+  }, [
+    checkout.status,
+    notePath,
+    requestedFile,
+    revision,
+    snapshot,
+    source.id,
+  ]);
 
-  if (!snapshot && phase !== "error") return <div className="vault-screen">
+  useEffect(() => {
+    if (historyMode !== "repository") return undefined;
+    const frame = window.requestAnimationFrame(() => repositoryPanelRef.current?.focus());
+    return () => window.cancelAnimationFrame(frame);
+  }, [historyMode]);
+
+  const closeRepositoryHistory = () => {
+    setHistoryMode(null);
+    window.requestAnimationFrame(() => repositoryButtonRef.current?.focus());
+  };
+
+  const selectRevision = (nextRevision) => {
+    const normalizedRevision = isFullCommitSha(nextRevision)
+      ? String(nextRevision).toLowerCase()
+      : null;
+    const targetSnapshot = normalizedRevision ? null : headSnapshot;
+    const targetPath = targetSnapshot && selectedPath && findFile(targetSnapshot, selectedPath)
+      ? selectedPath
+      : targetSnapshot?.initialNote || selectedPath;
+    navigateTo(
+      `${projectHref(source.id, targetPath, { revision: normalizedRevision })}${window.location.hash}`,
+    );
+    setHistoryMode(null);
+  };
+
+  const status = revision
+    ? checkout.status === "error"
+      ? { label: "REVISION ERROR", tone: "warn" }
+      : checkout.status === "ready"
+        ? { label: "COMMIT CHECKED OUT", tone: "warn" }
+        : { label: "CHECKING OUT COMMIT", tone: "active" }
+    : phase === "checking"
+      ? { label: headSnapshot ? "CHECKING HEAD" : "FETCHING VAULT", tone: "active" }
+      : phase === "stale"
+        ? { label: "CACHED / OFFLINE", tone: "warn" }
+        : phase === "error"
+          ? { label: "SOURCE ERROR", tone: "warn" }
+          : { label: "SNAPSHOT READY", tone: "ready" };
+
+  if (!headSnapshot && phase !== "error") return <div className="vault-screen">
     <ProjectsHeader detail={source.label} status={status} />
     <div className="vault-fetching">
       <div className="vault-fetching-mark" aria-hidden="true"><i /><i /><i /><i /></div>
@@ -826,7 +1301,7 @@ function VaultView({ anchor, notePath, source }) {
     </div>
   </div>;
 
-  if (!snapshot) return <div className="vault-screen">
+  if (!headSnapshot) return <div className="vault-screen">
     <ProjectsHeader detail={source.label} status={status} />
     <div className="vault-reader-error vault-source-error">
       <p className="vault-eyebrow">REMOTE SOURCE FAILURE</p>
@@ -837,21 +1312,81 @@ function VaultView({ anchor, notePath, source }) {
     </div>
   </div>;
 
+  if (revision && checkout.status === "error") return <div className="vault-screen">
+    <ProjectsHeader detail={source.label} status={status} />
+    <div className="vault-reader-error vault-source-error">
+      <p className="vault-eyebrow">HISTORICAL SNAPSHOT FAILURE</p>
+      <h2>THE REQUESTED COMMIT COULD NOT BE LOADED.</h2>
+      <code>{revision}</code>
+      <pre>{checkout.error?.message}</pre>
+      <a
+        className="vault-action"
+        href={projectHref(
+          source.id,
+          notePath && findFile(headSnapshot, notePath)
+            ? notePath
+            : headSnapshot.initialNote,
+        )}
+      >
+        RETURN TO HEAD <span>→</span>
+      </a>
+    </div>
+  </div>;
+
+  if (revision && !snapshot) return <div className="vault-screen">
+    <ProjectsHeader detail={source.label} status={status} />
+    <div className="vault-fetching">
+      <div className="vault-fetching-mark" aria-hidden="true"><i /><i /><i /><i /></div>
+      <p>LOADING COMMIT SNAPSHOT</p>
+      <span>{formatCommit(revision)} / {sourceMetadata(source)}</span>
+    </div>
+  </div>;
+
   return <div className="vault-screen">
     <ProjectsHeader detail={source.label} status={status} />
     {warning && <div className="vault-warning" role="status">
       <span>SYNC WARNING</span>
-      <p>{warning.message} The cached commit remains active.</p>
+      <p>
+        {warning.message} {revision
+          ? "The checked-out commit remains pinned."
+          : "The cached HEAD remains active."}
+      </p>
       <button type="button" onClick={() => setAttempt((value) => value + 1)}>RETRY</button>
     </div>}
     <main className="vault-layout">
-      <VaultSidebar activePath={selectedPath} snapshot={snapshot} source={source} />
-      <section className="vault-reader">
-        {file && historyOpen
+      <VaultSidebar
+        activePath={selectedPath}
+        buttonRef={repositoryButtonRef}
+        historyOpen={historyMode === "repository"}
+        onFileSelect={() => setHistoryMode(null)}
+        onHistory={() => {
+          if (historyMode === "repository") closeRepositoryHistory();
+          else setHistoryMode("repository");
+        }}
+        revision={revision}
+        snapshot={snapshot}
+        source={source}
+      />
+      <section
+        aria-busy={checkout.status === "loading"}
+        className="vault-reader"
+      >
+        {historyMode === "repository"
+          ? <RepositoryHistoryPanel
+            currentSnapshot={snapshot}
+            headSnapshot={headSnapshot}
+            history={repositoryHistory}
+            onClose={closeRepositoryHistory}
+            onSelect={selectRevision}
+            panelRef={repositoryPanelRef}
+            revision={revision}
+            source={source}
+          />
+          : file && historyMode === "file"
           ? <FileHistoryPanel
             file={file}
             history={history}
-            onClose={() => setHistoryOpen(false)}
+            onClose={() => setHistoryMode(null)}
             snapshot={snapshot}
             source={source}
           />
@@ -860,7 +1395,9 @@ function VaultView({ anchor, notePath, source }) {
               anchor={anchor}
               file={file}
               history={history}
-              onHistory={() => setHistoryOpen(true)}
+              historyOpen={historyMode === "file"}
+              onHistory={() => setHistoryMode("file")}
+              revision={revision}
               snapshot={snapshot}
               source={source}
             />
@@ -868,11 +1405,12 @@ function VaultView({ anchor, notePath, source }) {
               ? <AssetReader
                 file={file}
                 history={history}
-                onHistory={() => setHistoryOpen(true)}
+                historyOpen={historyMode === "file"}
+                onHistory={() => setHistoryMode("file")}
                 snapshot={snapshot}
                 source={source}
               />
-              : <MissingNote path={selectedPath} source={source} />}
+              : <MissingNote path={selectedPath} revision={revision} source={source} />}
       </section>
     </main>
   </div>;
@@ -880,7 +1418,13 @@ function VaultView({ anchor, notePath, source }) {
 
 export default function VaultApp({ route }) {
   const sources = useMemo(() => configuredSources(), []);
-  const { anchor, sourceId, notePath } = parseProjectsPath(route.pathname, route.hash);
+  const {
+    anchor,
+    notePath,
+    revision,
+    revisionInvalid,
+    sourceId,
+  } = parseProjectsPath(route.pathname, route.hash, route.search);
   const source = sources.find((candidate) => candidate.id === sourceId);
 
   useEffect(() => {
@@ -889,6 +1433,16 @@ export default function VaultApp({ route }) {
   }, []);
 
   if (!sourceId) return <ProjectsIndex sources={sources} />;
+  if (revisionInvalid) return <div className="vault-screen">
+    <ProjectsHeader detail="INVALID REVISION" status={{ label: "ROUTE ERROR", tone: "warn" }} />
+    <div className="vault-reader-error vault-source-error">
+      <p className="vault-eyebrow">COMMIT LOOKUP REJECTED</p>
+      <h2>A FULL 40-CHARACTER COMMIT SHA IS REQUIRED.</h2>
+      <a className="vault-action" href={projectHref(sourceId, notePath)}>
+        RETURN TO HEAD <span>→</span>
+      </a>
+    </div>
+  </div>;
   if (!source) return <div className="vault-screen">
     <ProjectsHeader detail="UNKNOWN SOURCE" status={{ label: "ROUTE ERROR", tone: "warn" }} />
     <div className="vault-reader-error vault-source-error">
@@ -899,5 +1453,10 @@ export default function VaultApp({ route }) {
     </div>
   </div>;
 
-  return <VaultView anchor={anchor} notePath={notePath} source={source} />;
+  return <VaultView
+    anchor={anchor}
+    notePath={notePath}
+    revision={revision}
+    source={source}
+  />;
 }

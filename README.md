@@ -30,6 +30,11 @@ The full tree under `root` is indexed, including non-Markdown repository objects
 Markdown is rendered in place; other files receive a repository-object view and an
 immutable raw link.
 
+The commit control at the bottom of the file tree opens repository history. Selecting
+a revision checks out the complete configured tree at that immutable commit and records
+the selection as `?rev=<commit-sha>`, so it survives refreshes and can be shared. The
+tracked branch continues updating independently, and **Return to HEAD** restores it.
+
 ## Snapshot model
 
 The reader asks GitHub for the branch head using an ETag. If the commit has not
@@ -39,7 +44,8 @@ tree and every Markdown file, reusing unchanged blob contents from the prior sna
 IndexedDB stores:
 
 - one repository record containing the active commit and ETag;
-- one snapshot record containing the tree and commit metadata;
+- one active branch snapshot plus up to four recently viewed immutable revisions,
+  each containing its tree and commit metadata;
 - one record per file, keyed by repository, commit, and path;
 - selected-file history pages, keyed by repository, HEAD, path, and page.
 

@@ -1,6 +1,7 @@
 import YAML from "yaml";
 
 const MARKDOWN_EXTENSION = /\.md(?:own)?$/i;
+const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/i;
 
 export function normalizePath(value) {
   const parts = [];
@@ -138,15 +139,40 @@ export function encodeNotePath(path) {
   return normalizePath(path).split("/").map(encodeURIComponent).join("/");
 }
 
-export function projectHref(sourceId, path) {
-  const base = `/projects/${encodeURIComponent(sourceId)}`;
-  return path ? `${base}/${encodeNotePath(path)}` : base;
+export function isFullCommitSha(value) {
+  return FULL_COMMIT_SHA.test(String(value || ""));
 }
 
-export function parseProjectsPath(pathname, hash = "") {
+function parseRevision(search = "") {
+  const params = new URLSearchParams(String(search || "").replace(/^\?/, ""));
+  if (!params.has("rev")) return { revision: null, revisionInvalid: false };
+  const value = params.get("rev") || "";
+  return isFullCommitSha(value)
+    ? { revision: value.toLowerCase(), revisionInvalid: false }
+    : { revision: null, revisionInvalid: true };
+}
+
+export function projectHref(sourceId, path, options = {}) {
+  const base = `/projects/${encodeURIComponent(sourceId)}`;
+  const pathname = path ? `${base}/${encodeNotePath(path)}` : base;
+  const revision = isFullCommitSha(options.revision)
+    ? String(options.revision).toLowerCase()
+    : null;
+  return revision ? `${pathname}?rev=${encodeURIComponent(revision)}` : pathname;
+}
+
+export function parseProjectsPath(pathname, hash = "", search = "") {
   const match = String(pathname || "").match(/^\/projects(?:\/(.*))?$/);
   const raw = String(match?.[1] || "").replace(/\/+$/, "");
-  if (!raw) return { sourceId: null, notePath: null, anchor: null };
+  const revisionState = parseRevision(search);
+  if (!raw) {
+    return {
+      sourceId: null,
+      notePath: null,
+      anchor: null,
+      ...revisionState,
+    };
+  }
   const encodedAnchor = String(hash || "").replace(/^#/, "");
   const anchor = encodedAnchor ? safeDecode(encodedAnchor) : null;
   const [sourcePart, ...pathParts] = raw.split("/");
@@ -154,6 +180,7 @@ export function parseProjectsPath(pathname, hash = "") {
     sourceId: safeDecode(sourcePart),
     notePath: pathParts.length ? normalizePath(pathParts.map(safeDecode).join("/")) : null,
     anchor,
+    ...revisionState,
   };
 }
 

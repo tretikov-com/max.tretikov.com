@@ -1,4 +1,10 @@
-import { markRepositoryChecked, readActiveSnapshot, saveSnapshot } from "./cache.js";
+import {
+  markRepositoryChecked,
+  readActiveSnapshot,
+  readSnapshot,
+  saveHistoricalSnapshot,
+  saveSnapshot,
+} from "./cache.js";
 import { createGitHubWebClient } from "./github-web.js";
 import {
   createSnapshot,
@@ -166,30 +172,109 @@ export function normalizeApiCommit(commit) {
       avatarUrl: commit.committer.avatar_url || null,
       url: commit.committer.html_url || null,
     } : null,
+    treeSha: commit?.commit?.tree?.sha || null,
+    parents: (commit?.parents || []).map((parent) => ({
+      sha: parent.sha || "",
+      url: parent.html_url || null,
+    })).filter((parent) => parent.sha),
+    verification: commit?.commit?.verification || null,
   };
 }
 
-async function fetchCommit(source, etag) {
-  const ref = encodeURIComponent(source.ref || "main");
-  const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits/${ref}`;
-  const headers = etag ? { "If-None-Match": etag } : {};
-  const { response, data } = await githubRequest(url, { headers });
-  return { data, etag: response.headers.get("etag") || etag };
+async function fetchCommit(source, ref, options = {}) {
+  const encodedRef = encodeURIComponent(String(ref || source.ref || "main"));
+  const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits/${encodedRef}`;
+  const headers = options.etag ? { "If-None-Match": options.etag } : {};
+  const { response, data } = await githubRequest(url, {
+    headers,
+    signal: options.signal,
+  });
+  return { data, etag: response.headers.get("etag") || options.etag || null };
 }
 
-async function fetchTree(source, treeSha) {
+async function fetchTree(source, treeSha, options = {}) {
   const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/git/trees/${encodeURIComponent(treeSha)}?recursive=1`;
-  const { data } = await githubRequest(url);
+  const { data } = await githubRequest(url, { signal: options.signal });
   if (data.truncated) {
     throw new Error("This repository tree exceeds GitHub's recursive tree limit; subtree pagination is not implemented yet.");
   }
   return data.tree;
 }
 
-async function fetchMarkdown(source, commitSha, entry) {
-  const response = await fetch(rawGithubUrl(source, commitSha, entry.repoPath));
+async function fetchMarkdown(source, commitSha, entry, options = {}) {
+  const response = await fetch(rawGithubUrl(source, commitSha, entry.repoPath), {
+    signal: options.signal,
+  });
   if (!response.ok) throw new Error(`Unable to fetch ${entry.repoPath}: ${response.status}`);
   return response.text();
+}
+
+function validateGitHubSource(source) {
+  if (!source?.owner || !source?.repo) {
+    throw new Error(`Vault source ${source?.id || "(unknown)"} is missing owner or repo.`);
+  }
+}
+
+function requireFullCommitSha(value) {
+  const sha = String(value || "").trim();
+  if (!/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(sha)) {
+    throw new TypeError("A full Git commit SHA is required.");
+  }
+  return sha;
+}
+
+async function materializeSnapshot(source, commit, previousSnapshot = null, options = {}) {
+  const commitSha = requireFullCommitSha(commit?.sha);
+  const treeSha = commit?.commit?.tree?.sha;
+  if (!treeSha) throw new Error(`GitHub commit ${commitSha} does not include a tree.`);
+
+  const tree = await fetchTree(source, treeSha, options);
+  const entries = tree
+    .filter((entry) => entry.type === "blob")
+    .map((entry) => {
+      const relativePath = stripSourceRoot(entry.path, source.root || "");
+      if (relativePath == null || !shouldIncludePath(source, relativePath)) return null;
+      return {
+        path: relativePath,
+        repoPath: entry.path,
+        blobSha: entry.sha,
+        size: entry.size || 0,
+        type: isMarkdownPath(relativePath) ? "markdown" : "asset",
+      };
+    })
+    .filter(Boolean);
+
+  const previousByBlob = new Map(
+    (previousSnapshot?.files || [])
+      .filter((file) => file.type === "markdown" && typeof file.content === "string")
+      .map((file) => [file.blobSha, file.content]),
+  );
+  const markdownEntries = entries.filter((entry) => entry.type === "markdown");
+  const contents = await mapConcurrent(
+    markdownEntries,
+    source.concurrency || DEFAULT_CONCURRENCY,
+    (entry) => (
+      previousByBlob.has(entry.blobSha)
+        ? previousByBlob.get(entry.blobSha)
+        : fetchMarkdown(source, commitSha, entry, options)
+    ),
+  );
+  const contentByPath = new Map(
+    markdownEntries.map((entry, index) => [entry.path, contents[index]]),
+  );
+  const files = entries.map((entry) => ({
+    ...entry,
+    content: contentByPath.has(entry.path) ? contentByPath.get(entry.path) : null,
+  }));
+  const normalizedCommit = normalizeApiCommit(commit);
+
+  return createSnapshot(source, commitSha, files, {
+    sourceKind: "github",
+    treeSha,
+    committedAt: normalizedCommit.committedAt,
+    headCommit: normalizedCommit,
+    commit: normalizedCommit,
+  });
 }
 
 export async function loadSourceSnapshot(source) {
@@ -219,13 +304,14 @@ export async function loadSourceSnapshot(source) {
 
 export async function syncSource(source, previousSnapshot = null) {
   if (source.kind === "inline") return loadSourceSnapshot(source);
-  if (!source.owner || !source.repo) throw new Error(`Vault source ${source.id} is missing owner or repo.`);
+  validateGitHubSource(source);
 
   const previous = previousSnapshot || await readActiveSnapshot(source);
   const canValidateByEtag = Boolean(previous?.headCommit);
   const { data: commit, etag } = await fetchCommit(
     source,
-    canValidateByEtag ? previous?.repository?.etag : null,
+    source.ref || "main",
+    { etag: canValidateByEtag ? previous?.repository?.etag : null },
   );
 
   if (!commit || (commit.sha === previous?.commitSha && previous?.headCommit)) {
@@ -236,44 +322,65 @@ export async function syncSource(source, previousSnapshot = null) {
     return previous ? { ...previous, repository } : previous;
   }
 
-  const tree = await fetchTree(source, commit.commit.tree.sha);
-  const entries = tree
-    .filter((entry) => entry.type === "blob")
-    .map((entry) => {
-      const relativePath = stripSourceRoot(entry.path, source.root || "");
-      if (relativePath == null || !shouldIncludePath(source, relativePath)) return null;
-      return {
-        path: relativePath,
-        repoPath: entry.path,
-        blobSha: entry.sha,
-        size: entry.size || 0,
-        type: isMarkdownPath(relativePath) ? "markdown" : "asset",
-      };
-    })
-    .filter(Boolean);
-
-  const previousByBlob = new Map(
-    (previous?.files || [])
-      .filter((file) => file.type === "markdown" && file.content)
-      .map((file) => [file.blobSha, file.content]),
-  );
-  const markdownEntries = entries.filter((entry) => entry.type === "markdown");
-  const contents = await mapConcurrent(markdownEntries, source.concurrency || DEFAULT_CONCURRENCY, async (entry) => {
-    return previousByBlob.get(entry.blobSha) || fetchMarkdown(source, commit.sha, entry);
-  });
-  const contentByPath = new Map(markdownEntries.map((entry, index) => [entry.path, contents[index]]));
-  const files = entries.map((entry) => ({
-    ...entry,
-    content: contentByPath.get(entry.path) || null,
-  }));
-
-  const snapshot = createSnapshot(source, commit.sha, files, {
-    sourceKind: "github",
-    treeSha: commit.commit.tree.sha,
-    committedAt: commit.commit.committer?.date || commit.commit.author?.date || null,
-    headCommit: normalizeApiCommit(commit),
-  });
+  const snapshot = await materializeSnapshot(source, commit, previous);
   return saveSnapshot(source, snapshot, { etag });
+}
+
+export async function loadSnapshotAtCommit(
+  source,
+  fullSha,
+  previousSnapshot = null,
+  options = {},
+) {
+  if (source.kind === "inline") {
+    const snapshot = await loadSourceSnapshot(source);
+    if (String(fullSha || "") !== snapshot.commitSha) {
+      throw new Error(`Inline source ${source.id} does not contain commit ${fullSha}.`);
+    }
+    return snapshot;
+  }
+
+  validateGitHubSource(source);
+  const requestedSha = requireFullCommitSha(fullSha);
+  const useCache = options.cache !== false;
+
+  if (useCache) {
+    try {
+      const cached = await readSnapshot(source, requestedSha);
+      if (cached) return cached;
+    } catch {
+      // IndexedDB is an optimization; a storage failure must not block an exact checkout.
+    }
+  }
+
+  const { data: commit } = await fetchCommit(source, requestedSha, {
+    signal: options.signal,
+  });
+  const canonicalSha = requireFullCommitSha(commit?.sha);
+  if (canonicalSha.toLowerCase() !== requestedSha.toLowerCase()) {
+    throw new Error(`GitHub resolved ${requestedSha} to a different commit (${canonicalSha}).`);
+  }
+
+  let reusableSnapshot = previousSnapshot;
+  if (!reusableSnapshot && useCache) {
+    try {
+      reusableSnapshot = await readActiveSnapshot(source);
+    } catch {
+      reusableSnapshot = null;
+    }
+  }
+
+  const snapshot = await materializeSnapshot(source, commit, reusableSnapshot, {
+    signal: options.signal,
+  });
+  if (!useCache) return snapshot;
+
+  try {
+    return await saveHistoricalSnapshot(source, snapshot);
+  } catch {
+    // The immutable snapshot is still usable when browser storage is unavailable or full.
+    return snapshot;
+  }
 }
 
 function nextPageFromLink(header) {
@@ -283,6 +390,36 @@ function nextPageFromLink(header) {
   const url = next.match(/<([^>]+)>/)?.[1];
   const page = url ? new URL(url).searchParams.get("page") : null;
   return page ? Number(page) : null;
+}
+
+function historyRef(source, options) {
+  return String(options.headSha || source.ref || "main");
+}
+
+async function fetchApiHistory(source, repositoryPath, options = {}) {
+  const page = Number(options.page || 1);
+  const selectedRef = historyRef(source, options);
+  const params = new URLSearchParams({
+    sha: selectedRef,
+    per_page: "100",
+    page: String(page),
+  });
+  if (repositoryPath) params.set("path", repositoryPath);
+
+  const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits?${params}`;
+  const { response, data } = await githubRequest(url, { signal: options.signal });
+  const nextPage = nextPageFromLink(response.headers.get("link"));
+  return {
+    transport: "github-api",
+    path: repositoryPath || null,
+    headSha: selectedRef,
+    commits: data.map(normalizeApiCommit),
+    pagination: {
+      hasNextPage: Boolean(nextPage),
+      nextPage,
+      endCursor: null,
+    },
+  };
 }
 
 export async function fetchFileHistory(source, repositoryPath, options = {}) {
@@ -299,29 +436,49 @@ export async function fetchFileHistory(source, repositoryPath, options = {}) {
 
   if (source.webProxy) {
     const client = createGitHubWebClient({ webProxy: source.webProxy });
-    const history = await client.fetchFileHistory(source, repositoryPath, options);
-    return { ...history, transport: "github-web" };
+    const selectedRef = historyRef(source, options);
+    const historySource = { ...source, ref: selectedRef };
+    const history = await client.fetchFileHistory(historySource, repositoryPath, {
+      ...options,
+      headSha: selectedRef,
+    });
+    return {
+      ...history,
+      headSha: history.headSha || selectedRef,
+      transport: "github-web",
+    };
   }
 
-  const page = Number(options.page || 1);
-  const params = new URLSearchParams({
-    sha: source.ref || "main",
-    path: repositoryPath,
-    per_page: "100",
-    page: String(page),
-  });
-  const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits?${params}`;
-  const { response, data } = await githubRequest(url, { signal: options.signal });
-  const nextPage = nextPageFromLink(response.headers.get("link"));
-  return {
-    transport: "github-api",
-    path: repositoryPath,
-    headSha: options.headSha || null,
-    commits: data.map(normalizeApiCommit),
-    pagination: {
-      hasNextPage: Boolean(nextPage),
-      nextPage,
-      endCursor: null,
-    },
-  };
+  return fetchApiHistory(source, repositoryPath, options);
+}
+
+export async function fetchRepositoryHistory(source, options = {}) {
+  if (source.kind === "inline") {
+    const snapshot = await loadSourceSnapshot(source);
+    return {
+      transport: "inline",
+      path: null,
+      headSha: snapshot.commitSha,
+      commits: [snapshot.headCommit],
+      pagination: { hasNextPage: false, nextPage: null, endCursor: null },
+    };
+  }
+
+  if (source.webProxy) {
+    const client = createGitHubWebClient({ webProxy: source.webProxy });
+    const selectedRef = historyRef(source, options);
+    const historySource = { ...source, ref: selectedRef };
+    const history = await client.fetchRepositoryHistory(historySource, {
+      ...options,
+      headSha: selectedRef,
+    });
+    return {
+      ...history,
+      path: null,
+      headSha: history.headSha || selectedRef,
+      transport: "github-web",
+    };
+  }
+
+  return fetchApiHistory(source, null, options);
 }

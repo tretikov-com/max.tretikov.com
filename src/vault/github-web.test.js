@@ -7,6 +7,7 @@ import {
   buildDeferredCommitDataUrl,
   buildFileHistoryUrl,
   buildLatestCommitUrl,
+  buildRepositoryHistoryUrl,
   buildTreeCommitInfoUrl,
   buildTreeListUrl,
   createGitHubWebClient,
@@ -67,6 +68,14 @@ test("GitHub web URL builders reproduce the official frontend routes", () => {
     "https://github.com/MaxTretikov/rlqf/commits/main/docs/index.md",
   );
   assert.equal(
+    buildRepositoryHistoryUrl(SOURCE),
+    "https://github.com/MaxTretikov/rlqf/commits/main",
+  );
+  assert.equal(
+    buildRepositoryHistoryUrl(SOURCE, { headSha: HEAD_COMMIT }),
+    `https://github.com/MaxTretikov/rlqf/commits/${HEAD_COMMIT}`,
+  );
+  assert.equal(
     buildDeferredCommitDataUrl(SOURCE, "docs/index.md"),
     "https://github.com/MaxTretikov/rlqf/commits/deferred_commit_data/main"
       + "?original_branch=main&path=docs%2Findex.md",
@@ -86,6 +95,17 @@ test("history URL builder preserves GitHub's opaque pagination and rename parame
   assert.equal(result.searchParams.get("browsing_rename_history"), "true");
   assert.equal(result.searchParams.get("new_path"), "docs/a file.md");
   assert.equal(result.searchParams.get("original_branch"), "main");
+});
+
+test("file-history URL uses the selected snapshot SHA and permits an empty repository path", () => {
+  assert.equal(
+    buildFileHistoryUrl(SOURCE, "docs/index.md", { headSha: HEAD_COMMIT }),
+    `https://github.com/MaxTretikov/rlqf/commits/${HEAD_COMMIT}/docs/index.md`,
+  );
+  assert.equal(
+    buildFileHistoryUrl(SOURCE, "", { headSha: HEAD_COMMIT }),
+    `https://github.com/MaxTretikov/rlqf/commits/${HEAD_COMMIT}`,
+  );
 });
 
 test("latest-commit parser normalizes message, author, URLs, dates, and a plain body", () => {
@@ -259,6 +279,40 @@ test("client sends official React headers through the configured proxy", async (
   }
   assert.equal(request.options.method, "GET");
   assert.equal(request.options.credentials, "same-origin");
+});
+
+test("client requests whole-repository history at the selected ref", async () => {
+  let upstream;
+  const client = createGitHubWebClient({
+    webProxy: (upstreamUrl) => {
+      upstream = upstreamUrl;
+      return "/github-web";
+    },
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => ({
+        payload: {
+          commitGroups: [],
+          currentCommit: { oid: HEAD_COMMIT },
+          filters: {
+            currentBlobPath: null,
+            pagination: { hasNextPage: false, hasPreviousPage: false },
+          },
+          refInfo: { name: HEAD_COMMIT, currentOid: HEAD_COMMIT },
+        },
+      }),
+    }),
+  });
+
+  const result = await client.fetchRepositoryHistory(SOURCE, {
+    headSha: HEAD_COMMIT,
+    after: `${HEAD_COMMIT} 25`,
+  });
+  const url = new URL(upstream);
+  assert.equal(url.pathname, `/MaxTretikov/rlqf/commits/${HEAD_COMMIT}`);
+  assert.equal(url.searchParams.get("after"), `${HEAD_COMMIT} 25`);
+  assert.equal(result.path, null);
+  assert.equal(result.headSha, HEAD_COMMIT);
 });
 
 test("a proxy that resolves back to github.com is rejected before fetch", async () => {

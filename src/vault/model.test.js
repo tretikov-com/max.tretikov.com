@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   buildVaultTree,
   createSnapshot,
+  isFullCommitSha,
   parseFrontmatter,
   parseProjectsPath,
   projectHref,
@@ -39,6 +40,8 @@ test("project routes preserve nested note paths", () => {
     sourceId: "research notes",
     notePath: "A folder/Field #1.md",
     anchor: null,
+    revision: null,
+    revisionInvalid: false,
   });
 });
 
@@ -50,6 +53,8 @@ test("project routes separate note anchors from the encoded path", () => {
     sourceId: "docs",
     notePath: "Notes/Field.md",
     anchor: "proof-sketch",
+    revision: null,
+    revisionInvalid: false,
   });
 });
 
@@ -58,16 +63,22 @@ test("project index and trailing slashes resolve to the project root", () => {
     sourceId: null,
     notePath: null,
     anchor: null,
+    revision: null,
+    revisionInvalid: false,
   });
   assert.deepEqual(parseProjectsPath("/projects/docs/"), {
     sourceId: "docs",
     notePath: null,
     anchor: null,
+    revision: null,
+    revisionInvalid: false,
   });
   assert.deepEqual(parseProjectsPath("/projects-old"), {
     sourceId: null,
     notePath: null,
     anchor: null,
+    revision: null,
+    revisionInvalid: false,
   });
 });
 
@@ -76,6 +87,48 @@ test("malformed route escapes do not crash path parsing", () => {
     sourceId: "docs",
     notePath: "Notes/%E0%A4%A.md",
     anchor: null,
+    revision: null,
+    revisionInvalid: false,
+  });
+});
+
+test("project routes preserve a full immutable revision alongside note anchors", () => {
+  const revision = "ABCDEF0123456789ABCDEF0123456789ABCDEF01";
+  const href = projectHref("docs", "Notes/Field.md", { revision });
+  assert.equal(
+    href,
+    "/projects/docs/Notes/Field.md?rev=abcdef0123456789abcdef0123456789abcdef01",
+  );
+  assert.deepEqual(parseProjectsPath(
+    "/projects/docs/Notes/Field.md",
+    "#proof",
+    "?rev=ABCDEF0123456789ABCDEF0123456789ABCDEF01",
+  ), {
+    sourceId: "docs",
+    notePath: "Notes/Field.md",
+    anchor: "proof",
+    revision: "abcdef0123456789abcdef0123456789abcdef01",
+    revisionInvalid: false,
+  });
+});
+
+test("invalid or abbreviated revisions are rejected and never serialized", () => {
+  assert.equal(isFullCommitSha("abcdef0123456789abcdef0123456789abcdef01"), true);
+  assert.equal(isFullCommitSha("abcdef0"), false);
+  assert.equal(
+    projectHref("docs", "index.md", { revision: "abcdef0" }),
+    "/projects/docs/index.md",
+  );
+  assert.deepEqual(parseProjectsPath(
+    "/projects/docs/index.md",
+    "",
+    "?rev=abcdef0",
+  ), {
+    sourceId: "docs",
+    notePath: "index.md",
+    anchor: null,
+    revision: null,
+    revisionInvalid: true,
   });
 });
 

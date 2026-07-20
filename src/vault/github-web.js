@@ -111,12 +111,14 @@ const HISTORY_QUERY_KEYS = [
   ["originalBranch", "original_branch"],
 ];
 
-export function buildFileHistoryUrl(source, path, options = {}) {
+export function buildFileHistoryUrl(source, path = "", options = {}) {
   const { ref } = sourceParts(source);
+  const historyRef = requiredString(options.headSha || ref, "history ref");
+  const encodedPath = encodePath(path, { allowEmpty: true });
   const url = new URL(githubUrl(repositoryRoute(
     source,
     "commits",
-    `${encodeURIComponent(ref)}/${encodePath(path)}`,
+    [encodeURIComponent(historyRef), encodedPath].filter(Boolean).join("/"),
   )));
   for (const [property, parameter] of HISTORY_QUERY_KEYS) {
     const value = options[property];
@@ -125,6 +127,10 @@ export function buildFileHistoryUrl(source, path, options = {}) {
     }
   }
   return url.href;
+}
+
+export function buildRepositoryHistoryUrl(source, options = {}) {
+  return buildFileHistoryUrl(source, "", options);
 }
 
 export function buildDeferredCommitDataUrl(source, path, options = {}) {
@@ -504,6 +510,16 @@ export function createGitHubWebClient(options = {}) {
       const { signal, ...query } = request;
       const data = await requestJson(
         buildFileHistoryUrl(source, path, query),
+        "commits",
+        signal,
+      );
+      return parseFileHistory(data);
+    },
+
+    async fetchRepositoryHistory(source, request = {}) {
+      const { signal, ...query } = request;
+      const data = await requestJson(
+        buildRepositoryHistoryUrl(source, query),
         "commits",
         signal,
       );
