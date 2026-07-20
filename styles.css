@@ -1,6 +1,7 @@
 /* Colour comes from palette.js, which publishes --bg (and the rest) on :root. */
-html,body{margin:0;height:100%;background:var(--bg);overflow:hidden;}
-#stage{position:fixed;inset:0;}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%;}
+html,body,#root{margin:0;width:100%;height:100%;background:var(--bg);overflow:hidden;}
+#stage{position:fixed;top:0;left:0;width:100vw;height:100vh;height:100dvh;}
 .route-loading{display:grid;place-items:center;min-height:100vh;background:var(--bg);color:var(--ink);font:700 10px "Space Mono",monospace;letter-spacing:.14em;}
 svg{display:block;width:100%;height:100%;}
 text{font-family:"Space Mono",monospace;}

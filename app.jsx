@@ -115,19 +115,29 @@ function packNav(items, avail, charW, separatorSpan) {
   return lines;
 }
 
+function readViewport() {
+  const visual = window.visualViewport;
+  return {
+    w: Math.round(visual?.width || document.documentElement.clientWidth || window.innerWidth),
+    h: Math.round(visual?.height || document.documentElement.clientHeight || window.innerHeight),
+  };
+}
+
 function useViewport() {
-  const [vp, setVp] = useState(() => ({ w: window.innerWidth, h: window.innerHeight }));
+  const [vp, setVp] = useState(readViewport);
   useEffect(() => {
     let raf = 0;
     const onResize = () => {
       cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => setVp({ w: window.innerWidth, h: window.innerHeight }));
+      raf = requestAnimationFrame(() => setVp(readViewport()));
     };
     window.addEventListener("resize", onResize);
     window.addEventListener("orientationchange", onResize);
+    window.visualViewport?.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
       window.removeEventListener("orientationchange", onResize);
+      window.visualViewport?.removeEventListener("resize", onResize);
       cancelAnimationFrame(raf);
     };
   }, []);
@@ -142,10 +152,23 @@ function buildScene(W, H) {
   const m = clamp(mn * 0.045, 22, 64);          // corner margin
   // The portrait plate needs more presence than the dense desktop caption.
   // Slightly tighter title tracking preserves its single-line technical label.
-  const portraitTitleX = m + pad + clamp(W * 0.025, 10, 28);
-  const portraitTitleCap = (W - portraitTitleX - m - 9) / 16.74;
-  const tSize = portrait ? clamp(Math.min(mn * 0.050, portraitTitleCap), 14, 32) : clamp(mn * 0.026, 16, 30);
-  const sSize = portrait ? clamp(tSize * 0.68, 13, 19) : clamp(tSize * 0.62, 10, 16);
+  const titleShift = portrait ? clamp(W * 0.018, 7, 16) : clamp(W * 0.018, 18, 34);
+  const portraitTitleX = m + pad + clamp(W * 0.025, 10, 28) + titleShift;
+  const portraitTitleCap = (W - portraitTitleX - m - 9) / 18.9;
+  // Give the main identity and navigation more presence, but cap the title by
+  // the actual open field to the right of the seam. This keeps it from
+  // spilling back over the hero wedge on narrower landscape screens.
+  const landscapeWedgeW = clamp(W * 0.26, 230, 520);
+  const landscapeTitleX = landscapeWedgeW * 0.31 + clamp(W * 0.058, 48, 116) + titleShift;
+  const landscapeTitleCap = (W - landscapeTitleX - m - 12) / 18.9;
+  const tSize = portrait
+    ? clamp(Math.min(mn * 0.067, portraitTitleCap), 17, 42)
+    : clamp(Math.min(mn * 0.038, landscapeTitleCap), 19, 42);
+  const sSize = portrait ? clamp(tSize * 0.68, 15, 25) : clamp(tSize * 0.62, 13, 24);
+  // Registration labels retain their technical scale; the role tag below is
+  // intentionally promoted as a secondary identity label.
+  const chromeSize = portrait ? clamp(tSize * 0.50, 10, 16) : clamp(tSize * 0.42, 10, 16);
+  const chromeLS = chromeSize * 0.085;
   const tLS = tSize * (portrait ? 0.20 : 0.32), sLS = sSize * 0.085;
 
   let seam, wedge, edge, nsign, titleX, titleBaseY, faint, depth;
@@ -157,7 +180,7 @@ function buildScene(W, H) {
     edge = { axis: "y", v0: 0, v1: H };
     nsign = 1;                                    // relief grows right, into the field
     titleBaseY = clamp(H * 0.30, 150, 360);
-    titleX = seamXAtY(seam, titleBaseY) + clamp(W * 0.058, 48, 116); // clear the white wedge with margin
+    titleX = seamXAtY(seam, titleBaseY) + clamp(W * 0.058, 48, 116) + titleShift; // clear the white wedge with margin
     faint = [wedgeW * 0.22, H * 0.10];
     depth = wedgeW;
   } else {
@@ -168,7 +191,7 @@ function buildScene(W, H) {
     edge = { axis: "x", v0: 0, v1: W };
     nsign = -1;                                   // relief grows down, into the field
     titleBaseY = bandH + clamp(H * 0.06, 34, 90);
-    titleX = m + pad + clamp(W * 0.025, 10, 28);
+    titleX = m + pad + clamp(W * 0.025, 10, 28) + titleShift;
     faint = [W * 0.10, bandH * 0.28];
     depth = bandH;
   }
@@ -182,15 +205,15 @@ function buildScene(W, H) {
     ? [NAV_ITEMS.slice(0, 2), NAV_ITEMS.slice(2)]
     : packNav(NAV_ITEMS, avail, navCharW, navSeparatorSpan);
 
-  const bioSize = sSize * 0.90;
+  const bioSize = clamp(chromeSize * 1.55, 15, 25);
   const bioPad = bioSize * 0.5;
-  const bioWidth = 15 * (bioSize * 0.60 + sLS) + bioPad * 2;
+  const bioWidth = 15 * (bioSize * 0.60 + chromeLS) + bioPad * 2;
   const bioChrome = portrait
     ? [clamp(W * 0.62, m + pad, W - bioWidth - m), H * 0.10]
-    : [m + pad, H - m - sSize * 0.7];
+    : [m + pad, H - m - bioSize * 0.56];
 
   return {
-    W, H, portrait, m, pad, tSize, sSize, bioSize, tLS, sLS,
+    W, H, portrait, m, pad, tSize, sSize, chromeSize, chromeLS, bioSize, tLS, sLS,
     seam, wedge, edge, nsign, titleX, depth,
     markerY: titleBaseY - tSize * 2.0,
     nameY: titleBaseY,
@@ -336,7 +359,7 @@ function Frame() {
         {/* bottom-left vertical text + ticks */}
         <g>
           <g className="edge-meta" opacity={profileMenu && s.portrait ? 0 : 1}>
-            <text x={s.m} y={H * (s.portrait ? 0.43 : 0.32)} fontSize={fx2(s.sSize * 0.62)} letterSpacing={fx2(s.sLS)} fill={leftInk}
+            <text x={s.m} y={H * (s.portrait ? 0.43 : 0.32)} fontSize={fx2(s.chromeSize * 0.62)} letterSpacing={fx2(s.chromeLS)} fill={leftInk}
               transform={`rotate(90 ${s.m} ${H * (s.portrait ? 0.43 : 0.32)})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV {__GIT_REVISION__} Δ +{__GIT_ADDITIONS__} -{__GIT_DELETIONS__}</text>
             <g fill={leftInk}>
               <path d={`M${fx2(s.m + 50)},${fx2(H * 0.50 + 55)} l9,0 l-9,7 z`} />
@@ -349,10 +372,10 @@ function Frame() {
           <g transform={`translate(${fx2(s.bioChrome[0])} ${fx2(s.bioChrome[1])})`} fill={PAL.wedgeInk}>
             {(() => {
               const pad = s.bioSize * 0.5;
-              const width = 15 * (s.bioSize * 0.60 + s.sLS) + pad * 2;
+              const width = 15 * (s.bioSize * 0.60 + s.chromeLS) + pad * 2;
               return <>
                 <rect x="0" y={fx2(-s.bioSize * 1.02)} width={fx2(width)} height={fx2(s.bioSize * 1.55)} fill={PAL.wedge} stroke={PAL.wedgeLine} strokeWidth="1.1" />
-                <text x={fx2(pad)} y={fx2(s.bioSize * 0.12)} fontSize={fx2(s.bioSize)} letterSpacing={fx2(s.sLS)}>BIO ML ENGINEER</text>
+                <text x={fx2(pad)} y={fx2(s.bioSize * 0.12)} fontSize={fx2(s.bioSize)} letterSpacing={fx2(s.chromeLS)}>BIO ML ENGINEER</text>
               </>;
             })()}
           </g>
