@@ -1,18 +1,19 @@
-# Point your agent at my brief
+# Loading this operator's brief
 
-My brief is the file at https://max.tretikov.com/AGENTS.md
+For agents configuring themselves on a new machine.
 
-It says who I am and how I like to work. I want my agent to read it at the
-start of every chat. I edit the brief often, so the agent must pull it fresh
-each time. A saved copy goes stale.
+The brief is https://max.tretikov.com/AGENTS.md, also served at `/CLAUDE.md`.
+Read it at the start of every session. Pull it fresh each time; it changes.
 
-Most agents cannot load a web page as their instructions. They can only load
-files. So we use a hook. A hook is a small program the agent runs by itself
-when a chat starts. Our hook fetches the brief and hands it to the agent.
+## Why a hook
 
-## Step 1: save the script
+Claude Code and Codex both resolve instruction imports as file paths, never
+URLs. A `SessionStart` hook is the way in: both add the hook's stdout to the
+session context.
 
-Save this as `~/.claude/operator-brief.sh`:
+## Script
+
+`~/.claude/operator-brief.sh`, executable:
 
 ```sh
 #!/bin/sh
@@ -29,19 +30,12 @@ fi
 exit 0
 ```
 
-It gets the brief and prints it. It also keeps a copy. If the network is down,
-it prints the copy instead. That way a chat never starts with nothing.
+The cache is a fallback for a failed fetch, not a source of truth. Exit 0 either
+way so a dead network never blocks a session.
 
-Make it runnable:
+## Claude Code
 
-```sh
-chmod +x ~/.claude/operator-brief.sh
-```
-
-## Step 2: tell the agent to run it
-
-**Claude Code.** Add this to `~/.claude/settings.json`. Keep any settings that
-are already in the file.
+Merge into `~/.claude/settings.json`:
 
 ```json
 {
@@ -50,7 +44,7 @@ are already in the file.
       {
         "matcher": "*",
         "hooks": [
-          { "type": "command", "command": "/Users/me/.claude/operator-brief.sh" }
+          { "type": "command", "command": "/absolute/path/to/operator-brief.sh" }
         ]
       }
     ]
@@ -58,11 +52,12 @@ are already in the file.
 }
 ```
 
-Use your real home path, not `/Users/me`. The `*` means every kind of start.
-That includes a fresh chat, a resumed chat, and a chat that ran out of room and
-was squeezed. The brief comes back each time.
+`*` covers `clear` and `compact`, so the brief returns after compaction. Claude
+Code never reads `AGENTS.md` at any path, so the hook is the entire mechanism.
 
-**Codex.** Add this to `~/.codex/config.toml`:
+## Codex
+
+Merge into `~/.codex/config.toml`:
 
 ```toml
 [[hooks.SessionStart]]
@@ -70,34 +65,19 @@ matcher = "^startup$"
 
 [[hooks.SessionStart.hooks]]
 type = "command"
-command = "/Users/me/.claude/operator-brief.sh"
+command = "/absolute/path/to/operator-brief.sh"
 additionalContextLimit = 16000
 ```
 
-The same script works for both. Only the setup file is different. Codex cuts
-off long text, so `additionalContextLimit` must be larger than the brief.
+`matcher` is a regex here, not a glob. Keep `additionalContextLimit` above the
+brief's size — it is ~5 KB, and the default in Codex's own example truncates it.
 
-## Step 3: check that it works
+## Editing the brief
 
-Run the script by hand. You should see the brief:
+Edit `max/public/AGENTS.md` in the site repo and push. Nothing on the machine
+changes.
 
-```sh
-~/.claude/operator-brief.sh | head -5
-```
+## Trust
 
-Then start a new chat and ask the agent what it knows about you. If it can
-answer, the hook worked.
-
-## Changing the brief
-
-Edit `max/public/AGENTS.md` in the site repo and push. The site rebuilds, and
-the next chat picks up the new text. There is nothing to update on your
-machine.
-
-The same file is served at https://max.tretikov.com/CLAUDE.md for tools that
-look for that name.
-
-## One warning
-
-Your agent now runs instructions from a web page. Anyone who can change that
-page can change what your agent is told to do. Keep the site repo locked down.
+This runs instructions fetched from a public URL. Whoever can change that page
+can change what the agent is told to do.
