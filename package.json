@@ -3,10 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "postbuild": "node scripts/create-pages-fallback.mjs",
+    "postbuild": "node scripts/postbuild.mjs",
     "preview": "vite preview",
     "test": "node --test"
   },
