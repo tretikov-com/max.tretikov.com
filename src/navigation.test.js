@@ -28,5 +28,6 @@ test("legacy landing hashes migrate but document fragments do not", () => {
   assert.equal(legacyRouteHref("#blog"), "/blog");
   assert.equal(legacyRouteHref("#papers"), "/papers");
   assert.equal(legacyRouteHref("#profiles"), "/profiles");
+  assert.equal(legacyRouteHref("#resume"), "/resume");
   assert.equal(legacyRouteHref("#proof-sketch"), null);
 });

@@ -1,6 +1,6 @@
 export const NAVIGATION_EVENT = "max:navigation";
 
-const LEGACY_ROUTE = /^#(?:projects(?:\/|$)|blog$|papers$|profiles$)/;
+const LEGACY_ROUTE = /^#(?:projects(?:\/|$)|blog$|papers$|profiles$|resume$)/;
 
 export function readRoute(location = window.location) {
   return {

@@ -1,0 +1,86 @@
+[resume]
+name = "Maksim [Max] Tretikov"
+headline = "Machine Learning Engineer"
+affiliation = "Bioengineering @ UC Berkeley"
+summary_lead = "6 years of professional machine learning experience."
+summary_body = "Studying bioengineering at UC Berkeley College of Engineering to learn how to apply that experience to biology and medicine. Experience at American and French public companies and academic institutions. Deep passion for the intersection of health + artificial intelligence."
+
+[resume.contact]
+location = "San Francisco, CA"
+phone = "+1 808 707 9612"
+email = "max@tretikov.com"
+linkedin = "https://www.linkedin.com/in/maxtretikov/"
+
+[[resume.skills]]
+label = "Programming Skills"
+detail = "Python (ML: PyTorch, huggingface, MLX, ggml, JAX, fast.ai, openCV, TensorFlow/Keras, and scikit-learn; backend: FastAPI, Flask, Django), JavaScript/TypeScript (Node.js, React, Vue, Svelte, Express, and GraphQL), Rust, Go, Java, C, C++, R, Matlab."
+
+[[resume.skills]]
+label = "Lab Skills"
+detail = "Sterilization, filtration, extraction, titration, distillation, crystallization, buffer solutions, centrifuging, IR/NMR spectroscopy, column/gas/thin layer chromatography, pipetting, equipment calibration."
+
+[[resume.experience]]
+organization = "OTR3"
+role = "Machine Learning Specialist"
+dates = "2025"
+description = "At a biotechnology startup, used bleeding-edge protein folding and molecular dynamics ML models to determine unknown properties of novel medicines; designed apps for automatic segmentation and image unsupervised learning tasks for medical research insights; and used local LLMs to perform transformations on sensitive tabular data."
+links = [
+  { label = "biotechnology startup", url = "https://www.otr3.com/en/home/" },
+]
+
+[[resume.experience]]
+organization = "Dartmouth College"
+role = "Research Partner"
+dates = "2024"
+description = "Used graph neural networks to analyze the connections between different regions of interest in human brains during social collaborative vs non-collaborative activities, at the Social Systems Lab."
+links = [
+  { label = "Social Systems Lab", url = "https://www.wheatlab.com/" },
+]
+
+[[resume.experience]]
+organization = "Lightspeed Commerce"
+role = "Frontend Developer"
+dates = "2022-2023"
+description = "Developed frontend components and test automation for our brand toolkit with React, TypeScript, Cypress, and Jest."
+links = [
+  { label = "brand toolkit", url = "https://www.nuorder.com/" },
+]
+
+[[resume.experience]]
+organization = "Nam.R"
+role = "Data and Machine Learning, Academic Research Intern"
+dates = "2019-2022"
+description = "As a part of a startup on climate and ecology research and development, prepared, collected, sanitized, and visualized data, then designed and developed computer vision models (U-nets) in Pytorch to identify density and locations of vegetation to maximize solar and wind energy applications."
+links = [
+  { label = "startup on climate and ecology research and development", url = "https://namr.com/en/" },
+]
+
+[[resume.experience]]
+organization = "Harvard University (Safra Center for Ethics)"
+role = "Research Assistant"
+dates = "2020"
+description = "Worked as part of a research team dedicated to developing quantifiable planning and metrics to prevent the early spread of COVID-19. The final product, the Roadmap for Pandemic Resilience, became a data-informed guide to US public policy and influenced an executive order."
+links = [
+  { label = "quantifiable planning", url = "http://pandemictesting.org" },
+  { label = "Roadmap for Pandemic Resilience", url = "https://ethics.harvard.edu/ttsi-technical-handbook" },
+  { label = "executive order", url = "https://www.whitehouse.gov/briefing-room/presidential-actions/2021/01/21/executive-order-establishing-the-covid-19-pandemic-testing-board-and-ensuring-a-sustainable-public-health-workforce-for-covid-19-and-other-biological-threats/" },
+]
+
+[[resume.community]]
+organization = "Darkshapes"
+role = "Co-Founder"
+dates = "2024-present"
+description = "Developing model inference frameworks and interpretability tools for large ML systems under the darkshapes organization."
+links = [
+  { label = "darkshapes", url = "http://darkshapes.org" },
+]
+
+[[resume.community]]
+organization = "Core Contributions"
+dates = "2017-present"
+description = "PyTorch, CPython, HuggingFace Transformers, Stanford OVAL."
+
+[[resume.education]]
+organization = "University of California Berkeley"
+role = "Bioengineering"
+dates = "2024-present"

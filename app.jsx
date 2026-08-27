@@ -21,6 +21,7 @@ import {
 
 const { useEffect, useMemo, useRef, useState } = React;
 const VaultApp = React.lazy(() => import("./src/vault/VaultApp.jsx"));
+const ResumeApp = React.lazy(() => import("./src/resume/ResumeApp.jsx"));
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fx2 = (n) => n.toFixed(1);
@@ -35,6 +36,7 @@ const FACETS = [
 
 const NAV_ITEMS = [
   { label: "PROJECTS", href: "/projects" },
+  { label: "RESUME", href: "/resume" },
   // { label: "BLOG", href: "/blog" },
   // { label: "PAPERS", href: "/papers" },
   { label: "PROFILES", href: "/profiles" },
@@ -522,6 +524,12 @@ function Site() {
   if (route.pathname === "/projects" || route.pathname.startsWith("/projects/")) {
     return <React.Suspense fallback={<div className="route-loading">LOADING PROJECT INDEX…</div>}>
       <VaultApp route={route} />
+    </React.Suspense>;
+  }
+
+  if (route.pathname === "/resume" || route.pathname === "/resume/") {
+    return <React.Suspense fallback={<div className="route-loading">LOADING RÉSUMÉ…</div>}>
+      <ResumeApp />
     </React.Suspense>;
   }
 

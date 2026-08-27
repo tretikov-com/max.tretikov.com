@@ -27,6 +27,7 @@
     "remark-math": "^6.0.0",
     "remark-parse": "^11.0.0",
     "remark-rehype": "^11.1.2",
+    "smol-toml": "^1.8.0",
     "unified": "^11.0.5",
     "unist-util-visit": "^5.0.0",
     "url": "^0.11.4",
