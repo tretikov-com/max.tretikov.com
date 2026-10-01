@@ -415,5 +415,14 @@ try {
     await new Promise((resolveClose) => server.close(resolveClose));
   }
   if (temporaryOutput) await rm(temporaryOutput, { force: true });
-  if (profileDirectory) await rm(profileDirectory, { force: true, recursive: true });
+  if (profileDirectory) {
+    await rm(profileDirectory, {
+      force: true,
+      recursive: true,
+      maxRetries: 5,
+      retryDelay: 200,
+    }).catch((error) => {
+      console.warn(`Could not remove temporary Chrome profile ${profileDirectory}: ${error.message}`);
+    });
+  }
 }
