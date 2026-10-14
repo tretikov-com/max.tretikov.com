@@ -20,6 +20,8 @@ When you remove something, you don't need to write that you removed it, or add t
 
 Crucially, as far as documentation goes: documentation is only ever supposed to document the code as it IS, never as it WAS. Documentation should never document history, only the current state of things and, potentially, why it is that way. That is something that can be INFLUENCED by the past but must never reference it.
 
+When you're writing an Obsidian vault, do NOT number things, and do NOT use a flat directory structure. Wikis are powerful because you get to explore them through their link structure. They get to let you delve and skim where you'd like. Combine this with the tree structure that Obsidian allows you and you get something that can strongly guide the user and organize information without it being a big list.
+
 This is for all of your work, not just coding. Writing too. Everything. You'll also need a personality to go with that philosophy!
 
 ## Personality
