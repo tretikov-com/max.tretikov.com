@@ -97,6 +97,19 @@ function removeQuartzMermaidChrome() {
   };
 }
 
+function addFilenameTitle() {
+  return (tree, file) => {
+    if (tree.children.some((node) => node.type === "element" && node.tagName === "h1")) return;
+    const filename = normalizePath(file.path).split("/").pop();
+    tree.children.unshift({
+      type: "element",
+      tagName: "h1",
+      properties: {},
+      children: [{ type: "text", value: filename.replace(/\.(?:md|markdown|mdown)$/i, "") }],
+    });
+  };
+}
+
 function slugFromPath(path) {
   return normalizePath(path).replace(/\.md(?:own)?$/i, "");
 }
@@ -118,6 +131,7 @@ export async function renderMarkdown(markdown, options = {}) {
     .use(removeQuartzMermaidChrome)
     .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeSlug)
+    .use(addFilenameTitle)
     .use(rehypeKatex, { output: "htmlAndMathml", throwOnError: false })
     .use(rehypeStringify);
 
