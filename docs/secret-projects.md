@@ -96,9 +96,13 @@ changes. Keep the variable name exactly as shown: `VITE_` variables are public.
 
 Sign in at `/projects/secret`. Only assigned projects appear. Notes, attachments,
 links, and commit history use authenticated requests to `api.github.com`.
-Sessions and private content stay in page memory, with no private IndexedDB or
-localStorage cache. Reloading requires signing in again. Sign out to clear the
-session and abort pending repository requests.
+The browser saves the username and password in localStorage after successful
+sign-in and receipt recording. Reloading or reopening the browser automatically
+unlocks the latest access configuration with those credentials. Private notes and
+GitHub tokens remain in page memory, with no private-content IndexedDB or
+localStorage cache. Sign out to clear the saved login and in-memory session and
+abort pending repository requests. If browser storage is unavailable, sign-in
+works for the current page session.
 
 **Edit note** changes the selected Markdown file. **New note** creates one at a
 relative path such as `Research/New idea.md`. Add a commit message and choose

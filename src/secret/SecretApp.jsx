@@ -3,9 +3,9 @@ import VaultApp from "../vault/VaultApp.jsx";
 import { unlockAccess } from "./credentials.js";
 import { NDA_ACTION_LABEL, recordNdaAcceptance } from "./acceptance.js";
 import { NDA_DOCUMENT } from "./nda-document.js";
+import { forgetLogin, readSavedLogin, rememberLogin, restoreLogin } from "./session.js";
 import "./secret.css";
 
-// A session lives only in this page's memory; reloading requires signing in again.
 let activeSession = null;
 
 function startSession(access) {
@@ -31,6 +31,7 @@ export default function SecretApp({ route }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
+  const [restoring, setRestoring] = useState(() => !activeSession && Boolean(readSavedLogin()));
   const [error, setError] = useState(null);
   const [attempt, setAttempt] = useState(0);
 
@@ -48,14 +49,22 @@ export default function SecretApp({ route }) {
     const controller = new AbortController();
     setManifest(null);
     setError(null);
+    setRestoring(Boolean(readSavedLogin()));
     fetch("/secret-access.json", { cache: "no-store", signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("The access file could not be loaded.");
         const value = await response.json();
         if (value.version !== 1 || !value.users) throw new Error("The access file is invalid.");
+        const access = await restoreLogin(value);
+        if (controller.signal.aborted) return;
         setManifest(value);
+        if (access) {
+          activeSession = startSession(access);
+          setSession(activeSession);
+        }
       })
-      .catch((failure) => { if (failure.name !== "AbortError") setError(failure); });
+      .catch((failure) => { if (!controller.signal.aborted) setError(failure); })
+      .finally(() => { if (!controller.signal.aborted) setRestoring(false); });
     return () => controller.abort();
   }, [session, attempt]);
 
@@ -70,6 +79,7 @@ export default function SecretApp({ route }) {
       } catch (failure) {
         throw new Error(`Your NDA acceptance could not be saved, so sign-in has not completed. Please retry or contact Max. ${failure.message}`);
       }
+      rememberLogin(access.username, password);
       activeSession = startSession(access);
       setSession(activeSession);
       setPassword("");
@@ -82,6 +92,7 @@ export default function SecretApp({ route }) {
       <a href="/projects/secret">SECRET PROJECTS</a>
       <span>{session.author.name}</span>
       <button type="button" onClick={() => {
+        forgetLogin();
         session.controller.abort();
         activeSession = null;
         setSession(null);
@@ -89,6 +100,8 @@ export default function SecretApp({ route }) {
     </div>
     <VaultApp route={route} sources={session.sources} privateProjects />
   </>;
+
+  if (restoring) return <div className="route-loading" role="status">RESTORING SESSION…</div>;
 
   const configured = manifest && Object.keys(manifest.users).length > 0;
   return <div className="vault-screen secret-screen">
@@ -107,7 +120,7 @@ export default function SecretApp({ route }) {
         <p className="vault-eyebrow">COLLABORATOR ACCESS</p>
         <label>USERNAME<input autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} required disabled={busy} /></label>
         <label>PASSWORD<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
-        <p className="secret-login-detail">Use the credentials Max shared with you.</p>
+        <p className="secret-login-detail">Use the credentials Max shared with you. This browser keeps you signed in until you sign out.</p>
         {error && <p className="secret-error" role="alert">{error.message}</p>}
         {!manifest && !error && <p role="status">Loading access…</p>}
         {manifest && !configured && <p role="status">Invitations aren’t configured yet. Check back when Max has shared your access.</p>}
