@@ -1,38 +1,4 @@
-.vault-document-actions {
-  display: flex;
-  align-items: stretch;
-  min-width: 0;
-}
-
-.vault-print-control {
-  display: inline-flex;
-  flex-shrink: 0;
-  align-items: center;
-  justify-content: center;
-  gap: 9px;
-  margin: 9px 0 9px 16px;
-  padding: 0 14px;
-  border: 1px solid var(--vault-ink);
-  border-radius: 0;
-  background: var(--vault-ink);
-  color: var(--vault-paper);
-  font: 700 8px/1.35 "Space Mono", monospace;
-  letter-spacing: .08em;
-  white-space: nowrap;
-  cursor: pointer;
-}
-
-.vault-print-control:hover {
-  background: var(--vault-violet);
-}
-
-.vault-print-control:focus-visible {
-  outline: 2px solid var(--vault-violet);
-  outline-offset: 3px;
-}
-
 .vault-print-control:disabled {
-  opacity: .5;
   cursor: wait;
 }
 
@@ -43,28 +9,6 @@
 
 .vault-brief-masthead {
   display: none;
-}
-
-@media (max-width: 1100px) {
-  .vault-brief .vault-commit-control span {
-    display: none;
-  }
-}
-
-@media (max-width: 520px) {
-  .vault-document-actions .vault-commit-control {
-    max-width: none;
-  }
-
-  .vault-brief .vault-document-path {
-    max-width: none;
-  }
-
-  .vault-print-control {
-    min-height: 40px;
-    margin-left: 9px;
-    padding-inline: 10px;
-  }
 }
 
 @page project-brief {

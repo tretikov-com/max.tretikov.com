@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import VaultApp from "../vault/VaultApp.jsx";
+import SessionAccount from "./SessionAccount.jsx";
 import { unlockAccess } from "./credentials.js";
 import { NDA_ACTION_LABEL, recordNdaAcceptance } from "./acceptance.js";
 import { NDA_DOCUMENT } from "./nda-document.js";
@@ -87,19 +88,17 @@ export default function SecretApp({ route }) {
     finally { setBusy(false); }
   };
 
-  if (session) return <>
-    <div className="secret-session">
-      <a href="/projects/secret">SECRET PROJECTS</a>
-      <span>{session.author.name}</span>
-      <button type="button" onClick={() => {
-        forgetLogin();
-        session.controller.abort();
-        activeSession = null;
-        setSession(null);
-      }}>SIGN OUT</button>
-    </div>
-    <VaultApp route={route} sources={session.sources} privateProjects />
-  </>;
+  if (session) return <VaultApp
+    route={route}
+    sources={session.sources}
+    privateProjects
+    account={<SessionAccount name={session.author.name} onSignOut={() => {
+      forgetLogin();
+      session.controller.abort();
+      activeSession = null;
+      setSession(null);
+    }} />}
+  />;
 
   if (restoring) return <div className="route-loading" role="status">RESTORING SESSION…</div>;
 

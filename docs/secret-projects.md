@@ -104,8 +104,10 @@ localStorage cache. Sign out to clear the saved login and in-memory session and
 abort pending repository requests. If browser storage is unavailable, sign-in
 works for the current page session.
 
-**Edit note** changes the selected Markdown file. **New note** creates one at a
-relative path such as `Research/New idea.md`. Add a commit message and choose
+The header provides **Sign out** beside the signed-in contributor. The document
+toolbar's **Edit** action changes the selected Markdown file.
+**New +** in the file-tree header creates a note at a relative path such as
+`Research/New idea.md`. Add a commit message and choose
 **Create pull request**. The browser creates a Git blob, tree, commit, and unique
 `review/<username>/<uuid>` branch through GitHub's REST API, then opens a PR
 against the configured branch. The commit starts at the snapshot being edited,

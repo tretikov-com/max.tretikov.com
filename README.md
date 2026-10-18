@@ -36,7 +36,7 @@ The full tree under `root` is indexed, including non-Markdown repository objects
 Markdown is rendered in place; other files receive a repository-object view and an
 immutable raw link.
 
-The commit control at the bottom of the file tree opens repository history. Selecting
+The **Repository history** control at the bottom of the file tree opens repository history. Selecting
 a revision checks out the complete configured tree at that immutable commit and records
 the selection as `?rev=<commit-sha>`, so it survives refreshes and can be shared. The
 tracked branch continues updating independently, and **Return to HEAD** restores it.
@@ -83,8 +83,8 @@ read those responses directly.
 
 By default, the deployed site reproduces the same semantics using the CORS-readable
 public REST metadata endpoints plus commit-addressed `raw.githubusercontent.com`
-content. The first commit returned for the selected file drives the message/SHA control
-at the top right; clicking it opens that file's history.
+content. The document toolbar's **History** control opens the selected file's
+revision log, including commit messages and hashes.
 
 To use the literal frontend routes, set `VITE_GITHUB_WEB_PROXY` to a same-origin or
 CORS-enabled, allowlisted edge endpoint. The client sends the official React request

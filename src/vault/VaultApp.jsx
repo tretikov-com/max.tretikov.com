@@ -55,21 +55,24 @@ function sourceMetadata(source) {
   return `GITHUB / ${source.owner}/${source.repo} / ${source.ref || "main"}${root}`;
 }
 
-function ProjectsHeader({ detail, status }) {
+function ProjectsHeader({ account, detail, privateProjects = false, status }) {
   return <header className="vault-header">
     <a className="vault-wordmark" href="/" aria-label="Return to Max Tretikov home">
       <span className="vault-wordmark-bracket">[</span>
       <span>MAX TRETIKOV</span>
       <span className="vault-wordmark-bracket">]</span>
     </a>
-    <div className="vault-header-rule" aria-hidden="true" />
-    <div className="vault-header-meta">
-      <span>PROJECT INDEX</span>
-      {detail && <span>{detail}</span>}
+    <div className="vault-header-context">
+      <nav className="vault-breadcrumb" aria-label="Project navigation">
+        <a href={privateProjects ? "/projects/secret" : "/projects"}>{privateProjects ? "SECRET PROJECTS" : "PROJECTS"}</a>
+        {detail && <><span aria-hidden="true">/</span><span>{detail}</span></>}
+      </nav>
+      <div className="vault-header-rule" aria-hidden="true" />
       {status && <span className={`vault-status vault-status--${status.tone || "idle"}`}>
         <i aria-hidden="true" />{status.label}
       </span>}
     </div>
+    {account}
   </header>;
 }
 
@@ -96,7 +99,7 @@ function EmptyProjects({ privateProjects = false }) {
   </main>;
 }
 
-function ProjectsIndex({ sources, privateProjects }) {
+function ProjectsIndex({ account, sources, privateProjects }) {
   const [activeSourceId, setActiveSourceId] = useState(sources[0]?.id || null);
   const [summaries, setSummaries] = useState({});
   const activeSource = sources.find((source) => source.id === activeSourceId) || sources[0];
@@ -129,7 +132,7 @@ function ProjectsIndex({ sources, privateProjects }) {
   }, [sources]);
 
   return <div className="vault-screen">
-    <ProjectsHeader detail={`${String(sources.length).padStart(2, "0")} VAULT${sources.length === 1 ? "" : "S"}`} />
+    <ProjectsHeader account={account} privateProjects={privateProjects} detail={`${String(sources.length).padStart(2, "0")} VAULT${sources.length === 1 ? "" : "S"}`} />
     {sources.length === 0 ? <EmptyProjects privateProjects={privateProjects} /> : <main className="projects-index">
       <div className="projects-intro">
         <h1>{privateProjects ? "SECRET" : "PROJECT"}<br />VAULTS</h1>
@@ -246,20 +249,26 @@ function VaultSidebar({
   historyOpen,
   onFileSelect,
   onHistory,
+  onNewNote,
+  newNoteDisabled,
   revision,
   snapshot,
   source,
+  status,
 }) {
-  const commit = snapshot.headCommit || {};
-  const message = commit.message || "Commit message unavailable";
-  const committedAt = commit.committedAt || commit.authoredAt || snapshot.committedAt;
-  const stateLabel = revision ? "CHECKED OUT" : "HEAD COMMIT";
-  const commitLabel = formatCommit(snapshot.commitSha);
-
   return <aside className="vault-sidebar">
     <div className="vault-sidebar-head">
       <span>{source.root ? `${source.root} / TREE` : "FILE SYSTEM"}</span>
-      <span>{snapshot.files.length} FILES</span>
+      <div className="vault-sidebar-tools">
+        <span>{snapshot.files.length} FILES</span>
+        {onNewNote && <button
+          aria-label="Create a new note"
+          disabled={newNoteDisabled}
+          onClick={onNewNote}
+          title={revision ? "Return to HEAD to create a note" : "Create a new note"}
+          type="button"
+        >NEW +</button>}
+      </div>
     </div>
     <nav aria-label={`${source.label} files`}>
       <ul className="vault-tree-root">
@@ -273,23 +282,16 @@ function VaultSidebar({
         />)}
       </ul>
     </nav>
-    <button
-      aria-controls="vault-repository-history"
-      aria-expanded={historyOpen}
-      aria-label={`Open repository history. ${stateLabel}: ${message}, ${commitLabel}`}
-      className="vault-sidebar-foot"
-      onClick={onHistory}
-      ref={buttonRef}
-      type="button"
-    >
-      <span>{stateLabel}</span>
-      <strong>{commitLabel}</strong>
-      <span className="vault-sidebar-commit-message">{message}</span>
-      {committedAt && <time dateTime={committedAt}>
-        {formatHistoryDate(committedAt)}
-      </time>}
-      <span className="vault-sidebar-history-affordance">VIEW HISTORY →</span>
-    </button>
+    <div className="vault-sidebar-foot">
+      <span className={`vault-status vault-status--${status.tone}`} role="status"><i aria-hidden="true" />{status.label}</span>
+      <button
+        aria-controls="vault-repository-history"
+        aria-expanded={historyOpen}
+        onClick={onHistory}
+        ref={buttonRef}
+        type="button"
+      >REPOSITORY HISTORY <span aria-hidden="true">→</span></button>
+    </div>
   </aside>;
 }
 
@@ -719,30 +721,12 @@ function useRepositoryHistory(source, headSnapshot, enabled) {
   return { ...history, loadMore };
 }
 
-function CommitControl({ expanded, history, onOpen }) {
-  const latest = history.commits?.[0];
-  const label = history.status === "loading"
-    ? "RESOLVING FILE COMMIT"
-    : latest?.message || (history.status === "error" ? "HISTORY UNAVAILABLE" : "NO FILE COMMITS");
-  const sha = latest?.shortSha || latest?.sha?.slice(0, 7) || "—";
-
-  return <button
-    aria-controls="vault-file-history"
-    aria-expanded={expanded}
-    className="vault-commit-control"
-    type="button"
-    onClick={onOpen}
-  >
-    <span>{label}</span>
-    <strong>{sha}</strong>
-  </button>;
-}
-
-function DocumentMeta({ children, file, history, historyOpen, onHistory }) {
+function DocumentMeta({ children, editDisabled, file, onEdit, onHistory }) {
   return <div className="vault-document-meta">
-    <span className="vault-document-path">{file.path}</span>
+    <span className="vault-document-path" title={file.path}>{file.path}</span>
     <div className="vault-document-actions">
-      <CommitControl expanded={historyOpen} history={history} onOpen={onHistory} />
+      {onEdit && <button className="vault-document-action" disabled={editDisabled} onClick={onEdit} title={editDisabled ? "This note is read-only" : "Edit this note"} type="button">EDIT</button>}
+      <button aria-controls="vault-file-history" className="vault-document-action" onClick={onHistory} type="button">HISTORY</button>
       {children}
     </div>
   </div>;
@@ -750,9 +734,9 @@ function DocumentMeta({ children, file, history, historyOpen, onHistory }) {
 
 function VaultReader({
   anchor,
+  editDisabled,
   file,
-  history,
-  historyOpen,
+  onEdit,
   onHistory,
   revision,
   snapshot,
@@ -928,20 +912,20 @@ function VaultReader({
 
   return <div className="vault-brief">
     <DocumentMeta
+      editDisabled={editDisabled}
       file={file}
-      history={history}
-      historyOpen={historyOpen}
+      onEdit={onEdit}
       onHistory={onHistory}
     >
       <button
         aria-label="Print document or save as PDF"
-        className="vault-print-control"
+        className="vault-document-action vault-print-control"
         disabled={printing || prepared.html !== rendered.html || Boolean(prepared.error)}
         onClick={printBrief}
         title="Print the current document or save it as a PDF"
         type="button"
       >
-        {printing ? "PREPARING…" : "PRINT / PDF"}
+        {printing ? "PREPARING…" : "PRINT"}
         <span aria-hidden="true">↗</span>
       </button>
     </DocumentMeta>
@@ -990,7 +974,7 @@ function useAssetUrl(source, snapshot, file) {
   return asset.key === key ? asset : { url: null, error: null };
 }
 
-function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }) {
+function AssetReader({ file, onHistory, snapshot, source }) {
   const extension = file.path.split(".").pop()?.toUpperCase() || "FILE";
   const { url: rawUrl, error } = useAssetUrl(source, snapshot, file);
   const image = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(file.path);
@@ -998,8 +982,6 @@ function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }
   return <>
     <DocumentMeta
       file={file}
-      history={history}
-      historyOpen={historyOpen}
       onHistory={onHistory}
     />
     <div className="vault-asset">
@@ -1196,7 +1178,7 @@ function MissingNote({ path, revision, source }) {
   </div>;
 }
 
-function VaultView({ anchor, notePath, revision, source }) {
+function VaultView({ account, anchor, notePath, revision, source }) {
   const [headSnapshot, setHeadSnapshot] = useState(null);
   const [checkout, setCheckout] = useState({
     revision: null,
@@ -1413,7 +1395,7 @@ function VaultView({ anchor, notePath, revision, source }) {
           : { label: "SNAPSHOT READY", tone: "ready" };
 
   if (!headSnapshot && phase !== "error") return <div className="vault-screen">
-    <ProjectsHeader detail={source.label} status={status} />
+    <ProjectsHeader account={account} privateProjects={source.private} detail={source.label} status={status} />
     <div className="vault-fetching">
       <div className="vault-fetching-mark" aria-hidden="true"><i /><i /><i /><i /></div>
       <p>NEGOTIATING REPOSITORY TREE</p>
@@ -1422,7 +1404,7 @@ function VaultView({ anchor, notePath, revision, source }) {
   </div>;
 
   if (!headSnapshot) return <div className="vault-screen">
-    <ProjectsHeader detail={source.label} status={status} />
+    <ProjectsHeader account={account} privateProjects={source.private} detail={source.label} status={status} />
     <div className="vault-reader-error vault-source-error">
       <h2>NO LOCAL SNAPSHOT IS AVAILABLE.</h2>
       <pre>{warning?.message}</pre>
@@ -1433,7 +1415,7 @@ function VaultView({ anchor, notePath, revision, source }) {
   </div>;
 
   if (revision && checkout.status === "error") return <div className="vault-screen">
-    <ProjectsHeader detail={source.label} status={status} />
+    <ProjectsHeader account={account} privateProjects={source.private} detail={source.label} status={status} />
     <div className="vault-reader-error vault-source-error">
       <h2>THE REQUESTED COMMIT COULD NOT BE LOADED.</h2>
       <code>{revision}</code>
@@ -1454,7 +1436,7 @@ function VaultView({ anchor, notePath, revision, source }) {
   </div>;
 
   if (revision && !snapshot) return <div className="vault-screen">
-    <ProjectsHeader detail={source.label} status={status} />
+    <ProjectsHeader account={account} privateProjects={source.private} detail={source.label} status={status} />
     <div className="vault-fetching">
       <div className="vault-fetching-mark" aria-hidden="true"><i /><i /><i /><i /></div>
       <p>LOADING COMMIT SNAPSHOT</p>
@@ -1463,7 +1445,7 @@ function VaultView({ anchor, notePath, revision, source }) {
   </div>;
 
   return <div className="vault-screen">
-    <ProjectsHeader detail={source.label} status={status} />
+    <ProjectsHeader account={account} privateProjects={source.private} detail={source.label} status={revision ? status : null} />
     {warning && <div className="vault-warning" role="status">
       <span>SYNC WARNING</span>
       <p>
@@ -1483,19 +1465,17 @@ function VaultView({ anchor, notePath, revision, source }) {
           if (historyMode === "repository") closeRepositoryHistory();
           else setHistoryMode("repository");
         }}
+        onNewNote={source.private ? () => { setHistoryMode(null); setEditor({ file: null, snapshot }); } : undefined}
+        newNoteDisabled={Boolean(revision) || Boolean(editor)}
         revision={revision}
         snapshot={snapshot}
         source={source}
+        status={status}
       />
       <section
         aria-busy={checkout.status === "loading"}
         className="vault-reader"
       >
-        {source.private && !editor && <div className="secret-tools">
-          {revision && <span>VIEWING HISTORY / RETURN TO HEAD TO EDIT</span>}
-          <button type="button" disabled={Boolean(revision) || file?.type !== "markdown" || file?.mode === "120000"} onClick={() => { setHistoryMode(null); setEditor({ file, snapshot }); }}>EDIT NOTE</button>
-          <button type="button" disabled={Boolean(revision)} onClick={() => { setHistoryMode(null); setEditor({ file: null, snapshot }); }}>NEW NOTE +</button>
-        </div>}
         {editor ? <React.Suspense fallback={<p>LOADING EDITOR…</p>}>
           <VaultEditor file={editor.file} snapshot={editor.snapshot} source={source} onClose={() => setEditor(null)} />
         </React.Suspense> : historyMode === "repository"
@@ -1521,9 +1501,9 @@ function VaultView({ anchor, notePath, revision, source }) {
             ? <VaultReader
               key={`${snapshot.commitSha}:${file.path}`}
               anchor={anchor}
+              editDisabled={Boolean(revision) || file.mode === "120000"}
               file={file}
-              history={history}
-              historyOpen={historyMode === "file"}
+              onEdit={source.private ? () => { setHistoryMode(null); setEditor({ file, snapshot }); } : undefined}
               onHistory={() => setHistoryMode("file")}
               revision={revision}
               snapshot={snapshot}
@@ -1532,8 +1512,6 @@ function VaultView({ anchor, notePath, revision, source }) {
             : file
               ? <AssetReader
                 file={file}
-                history={history}
-                historyOpen={historyMode === "file"}
                 onHistory={() => setHistoryMode("file")}
                 snapshot={snapshot}
                 source={source}
@@ -1544,7 +1522,7 @@ function VaultView({ anchor, notePath, revision, source }) {
   </div>;
 }
 
-export default function VaultApp({ route, sources: suppliedSources, privateProjects = false }) {
+export default function VaultApp({ account, route, sources: suppliedSources, privateProjects = false }) {
   const publicSources = useMemo(() => configuredSources(), []);
   const sources = suppliedSources || publicSources;
   const {
@@ -1565,9 +1543,9 @@ export default function VaultApp({ route, sources: suppliedSources, privateProje
     };
   }, []);
 
-  if (!sourceId) return <ProjectsIndex sources={sources} privateProjects={privateProjects} />;
+  if (!sourceId) return <ProjectsIndex account={account} sources={sources} privateProjects={privateProjects} />;
   if (revisionInvalid) return <div className="vault-screen">
-    <ProjectsHeader detail="INVALID REVISION" status={{ label: "ROUTE ERROR", tone: "warn" }} />
+    <ProjectsHeader account={account} privateProjects={privateProjects} detail="INVALID REVISION" status={{ label: "ROUTE ERROR", tone: "warn" }} />
     <div className="vault-reader-error vault-source-error">
       <h2>A FULL 40-CHARACTER COMMIT SHA IS REQUIRED.</h2>
       <a className="vault-action" href={projectHref({ id: sourceId, private: privateProjects }, notePath)}>
@@ -1577,7 +1555,7 @@ export default function VaultApp({ route, sources: suppliedSources, privateProje
     </div>
   </div>;
   if (!source) return <div className="vault-screen">
-    <ProjectsHeader detail="UNKNOWN SOURCE" status={{ label: "ROUTE ERROR", tone: "warn" }} />
+    <ProjectsHeader account={account} privateProjects={privateProjects} detail="UNKNOWN SOURCE" status={{ label: "ROUTE ERROR", tone: "warn" }} />
     <div className="vault-reader-error vault-source-error">
       <h2>THE REQUESTED VAULT IS NOT CONFIGURED.</h2>
       <code>{sourceId}</code>
@@ -1587,6 +1565,7 @@ export default function VaultApp({ route, sources: suppliedSources, privateProje
   </div>;
 
   return <VaultView
+    account={account}
     key={`${source.private ? "private" : "public"}:${source.id}`}
     anchor={anchor}
     notePath={notePath}
