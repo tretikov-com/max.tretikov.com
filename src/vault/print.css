@@ -1,0 +1,297 @@
+.vault-document-actions {
+  display: flex;
+  align-items: stretch;
+  min-width: 0;
+}
+
+.vault-print-control {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  gap: 9px;
+  margin: 9px 0 9px 16px;
+  padding: 0 14px;
+  border: 1px solid var(--vault-ink);
+  border-radius: 0;
+  background: var(--vault-ink);
+  color: var(--vault-paper);
+  font: 700 8px/1.35 "Space Mono", monospace;
+  letter-spacing: .08em;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.vault-print-control:hover {
+  background: var(--vault-violet);
+}
+
+.vault-print-control:focus-visible {
+  outline: 2px solid var(--vault-violet);
+  outline-offset: 3px;
+}
+
+.vault-print-control:disabled {
+  opacity: .5;
+  cursor: wait;
+}
+
+.vault-print-error {
+  color: #7d3329;
+  font: 12px/1.5 "Space Grotesk", sans-serif;
+}
+
+.vault-brief-masthead {
+  display: none;
+}
+
+@media (max-width: 1100px) {
+  .vault-brief .vault-commit-control span {
+    display: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .vault-document-actions .vault-commit-control {
+    max-width: none;
+  }
+
+  .vault-brief .vault-document-path {
+    max-width: none;
+  }
+
+  .vault-print-control {
+    min-height: 40px;
+    margin-left: 9px;
+    padding-inline: 10px;
+  }
+}
+
+@page project-brief {
+  size: Letter;
+  margin: .65in;
+}
+
+@media print {
+  html[data-view="vault"],
+  html[data-view="vault"] body,
+  body[data-view="vault"] #root {
+    width: auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
+    background: #fff;
+  }
+
+  .vault-screen:has(.vault-brief) {
+    page: project-brief;
+    min-height: 0;
+    background: #fff;
+    color: #17151d;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+
+  .vault-screen:has(.vault-brief) .vault-header,
+  .vault-screen:has(.vault-brief) .vault-sidebar,
+  .vault-screen:has(.vault-brief) .vault-warning,
+  .vault-brief .vault-document-meta,
+  .vault-brief .vault-print-error {
+    display: none;
+  }
+
+  .vault-layout:has(.vault-brief) {
+    display: block;
+    min-height: 0;
+  }
+
+  .vault-reader:has(.vault-brief) {
+    margin: 0;
+    padding: 0;
+    background: #fff;
+  }
+
+  .vault-brief-masthead {
+    display: flex;
+    flex-direction: column;
+    gap: 7pt;
+    margin-bottom: 20pt;
+    padding-bottom: 12pt;
+    border-bottom: 1pt solid var(--vault-ink);
+    font: 7pt/1.5 "Space Mono", monospace;
+    letter-spacing: .06em;
+    break-inside: avoid;
+    break-after: avoid;
+  }
+
+  .vault-brief-masthead > span {
+    color: var(--vault-violet-dark);
+    font-weight: 700;
+  }
+
+  .vault-brief-masthead strong {
+    padding-left: 9pt;
+    border-left: 4pt solid var(--vault-violet);
+    font: 600 15pt/1.2 "Space Grotesk", sans-serif;
+    letter-spacing: .1em;
+  }
+
+  .vault-brief-masthead > div {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: 4pt 12pt;
+    overflow-wrap: anywhere;
+    letter-spacing: 0;
+  }
+
+  .vault-brief .vault-article {
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    font-size: 10pt;
+    line-height: 1.5;
+  }
+
+  .vault-brief .vault-article h1,
+  .vault-brief .vault-article h2,
+  .vault-brief .vault-article h3,
+  .vault-brief .vault-article h4,
+  .vault-brief .vault-article h5,
+  .vault-brief .vault-article h6 {
+    break-after: avoid;
+    break-inside: avoid;
+    line-height: 1.2;
+  }
+
+  .vault-brief .vault-article h1 {
+    margin: 0 0 16pt;
+    font-size: 25pt;
+  }
+
+  .vault-brief .vault-article h1::after {
+    width: 36pt;
+    height: 4pt;
+    margin-top: 10pt;
+  }
+
+  .vault-brief .vault-article h2 {
+    margin: 20pt 0 8pt;
+    padding-top: 9pt;
+    border-top-width: .75pt;
+    font-size: 15pt;
+  }
+
+  .vault-brief .vault-article h3 {
+    margin: 14pt 0 6pt;
+    font-size: 12pt;
+  }
+
+  .vault-brief .vault-article p,
+  .vault-brief .vault-article li {
+    max-width: none;
+    orphans: 3;
+    widows: 3;
+  }
+
+  .vault-brief .vault-article p {
+    margin: 0 0 9pt;
+  }
+
+  .vault-brief .vault-article a {
+    color: inherit;
+    text-decoration-color: #a49bab;
+    text-underline-offset: 2pt;
+  }
+
+  .vault-brief .vault-article blockquote,
+  .vault-brief .vault-article .callout,
+  .vault-brief .vault-article .transclude {
+    margin: 12pt 0;
+    border-left-width: 3pt;
+    background: #f6f6f5;
+  }
+
+  .vault-brief .vault-article blockquote {
+    padding: 8pt 12pt;
+  }
+
+  .vault-brief .vault-article .callout-title,
+  .vault-brief .vault-article .transclude-label {
+    padding: 7pt 10pt;
+    font-size: 7pt;
+    break-after: avoid;
+  }
+
+  .vault-brief .vault-article .callout-content,
+  .vault-brief .vault-article .transclude-content {
+    padding: 8pt 10pt;
+  }
+
+  .vault-brief .vault-article pre:not(.mermaid) {
+    padding: 9pt;
+    border: .5pt solid #c8c3ce;
+    background: #f6f6f5;
+    color: #17151d;
+    font-size: 7pt;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    overflow: visible;
+    overflow-wrap: anywhere;
+    break-inside: avoid;
+  }
+
+  .vault-brief .vault-article table {
+    margin: 12pt 0;
+    font-size: 8pt;
+  }
+
+  .vault-brief .vault-article thead {
+    display: table-header-group;
+  }
+
+  .vault-brief .vault-article tr {
+    break-inside: avoid;
+  }
+
+  .vault-brief .vault-article th,
+  .vault-brief .vault-article td {
+    padding: 5pt 7pt;
+  }
+
+  .vault-brief .vault-article th {
+    background: #ebe9ef;
+    color: #17151d;
+    font-size: 7pt;
+  }
+
+  .vault-brief .vault-article img,
+  .vault-brief .vault-article video,
+  .vault-brief .vault-article pre:has(>code.mermaid) {
+    max-width: 100%;
+    max-height: 8in;
+    object-fit: contain;
+    break-inside: avoid;
+  }
+
+  .vault-brief .vault-article pre:has(>code.mermaid) {
+    padding: 10pt;
+    overflow: visible;
+  }
+
+  .vault-brief .vault-article code.mermaid svg {
+    width: 100%;
+    height: auto;
+    max-height: 7.5in;
+  }
+
+  .vault-brief .vault-article .katex-display {
+    padding: 8pt 0;
+    overflow: visible;
+    break-inside: avoid;
+  }
+
+  .vault-brief .vault-article details::details-content {
+    content-visibility: visible;
+  }
+}

@@ -21,6 +21,8 @@ import {
 } from "./model.js";
 import { navigateTo } from "../navigation.js";
 import { configuredSources } from "./sources.js";
+import { waitForPrintAssets } from "./print.js";
+import "./print.css";
 
 const EXTERNAL_PROTOCOL = /^(?:[a-z]+:|\/\/)/i;
 let rendererPromise;
@@ -723,10 +725,13 @@ function CommitControl({ expanded, history, onOpen }) {
   </button>;
 }
 
-function DocumentMeta({ file, history, historyOpen, onHistory }) {
+function DocumentMeta({ children, file, history, historyOpen, onHistory }) {
   return <div className="vault-document-meta">
     <span className="vault-document-path">{file.path}</span>
-    <CommitControl expanded={historyOpen} history={history} onOpen={onHistory} />
+    <div className="vault-document-actions">
+      <CommitControl expanded={historyOpen} history={history} onOpen={onHistory} />
+      {children}
+    </div>
   </div>;
 }
 
@@ -742,20 +747,31 @@ function VaultReader({
 }) {
   const articleRef = useRef(null);
   const rendered = useRenderedNote(file);
+  const documentKind = /(?:^|\/)readme\.md(?:own)?$/i.test(file.path)
+    || file.path === snapshot.initialNote ? "Project Brief" : "Project Note";
+  const [prepared, setPrepared] = useState({ html: null, error: null });
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState(null);
+
+  useEffect(() => {
+    const previousTitle = document.title;
+    document.title = `${source.label} — ${documentKind} — ${file.path.replace(/\.md(?:own)?$/i, "")} — ${formatCommit(snapshot.commitSha)}`;
+    return () => { document.title = previousTitle; };
+  }, [documentKind, file.path, snapshot.commitSha, source.label]);
 
   useEffect(() => {
     const article = articleRef.current;
     if (!article || !rendered.html) return undefined;
+    setPrepared({ html: null, error: null });
+    setPrintError(null);
 
-    const click = (event) => {
-      const link = event.target.closest("a[href]");
-      if (!link || !article.contains(link)) return;
-      const href = link.getAttribute("href");
+    const prepareLink = (link) => {
+      const href = link.dataset.vaultTarget || link.getAttribute("href");
       if (!href || EXTERNAL_PROTOCOL.test(href)) return;
+      link.dataset.vaultTarget = href;
 
       if (href.startsWith("#")) {
-        event.preventDefault();
-        navigateTo(`${projectHref(source.id, file.path, { revision })}${href}`);
+        link.setAttribute("href", `${projectHref(source.id, file.path, { revision })}${href}`);
         return;
       }
 
@@ -765,8 +781,7 @@ function VaultReader({
         snapshot.files.map((candidate) => candidate.path),
       );
       if (target) {
-        event.preventDefault();
-        navigateTo(`${projectHref(source.id, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`);
+        link.setAttribute("href", `${projectHref(source.id, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`);
         return;
       }
 
@@ -777,8 +792,7 @@ function VaultReader({
         snapshot.files.map((candidate) => candidate.path),
       );
       if (assetPath) {
-        event.preventDefault();
-        navigateTo(projectHref(source.id, assetPath, { revision }));
+        link.setAttribute("href", projectHref(source.id, assetPath, { revision }));
         return;
       }
 
@@ -793,12 +807,12 @@ function VaultReader({
         link.setAttribute("rel", "noreferrer");
       }
     };
-    article.addEventListener("click", click);
 
     let cancelled = false;
     const prepare = async () => {
       await expandTransclusions(article, snapshot, file.path, 0, new Set([file.path]));
       if (cancelled) return;
+      article.querySelectorAll("a[href]").forEach(prepareLink);
 
       if (anchor) {
         const decodedAnchor = decodeURIComponent(anchor).replace(/^\^/, "");
@@ -841,13 +855,30 @@ function VaultReader({
       });
       await mermaid.run({ nodes: diagrams, suppressErrors: true });
     };
-    prepare().catch(() => {});
+    prepare().then(() => {
+      if (!cancelled) setPrepared({ html: rendered.html, error: null });
+    }).catch((error) => {
+      if (!cancelled) setPrepared({ html: null, error });
+    });
 
     return () => {
       cancelled = true;
-      article.removeEventListener("click", click);
     };
   }, [anchor, file.path, rendered.html, revision, snapshot, source]);
+
+  const printBrief = async () => {
+    setPrinting(true);
+    setPrintError(null);
+    try {
+      await waitForPrintAssets(articleRef.current);
+      // A route change can unmount this reader while images or fonts are loading.
+      if (articleRef.current?.isConnected) window.print();
+    } catch (error) {
+      if (articleRef.current?.isConnected) setPrintError(error);
+    } finally {
+      setPrinting(false);
+    }
+  };
 
   if (rendered.error) return <div className="vault-reader-error">
     <p className="vault-eyebrow">RENDER FAILURE</p>
@@ -857,19 +888,42 @@ function VaultReader({
 
   if (!rendered.html) return <div className="vault-reader-loading">TRANSFORMING NOTE / QUARTZ OFM…</div>;
 
-  return <>
+  return <div className="vault-brief">
     <DocumentMeta
       file={file}
       history={history}
       historyOpen={historyOpen}
       onHistory={onHistory}
-    />
+    >
+      <button
+        aria-label="Print document or save as PDF"
+        className="vault-print-control"
+        disabled={printing || prepared.html !== rendered.html || Boolean(prepared.error)}
+        onClick={printBrief}
+        title="Print the current document or save it as a PDF"
+        type="button"
+      >
+        {printing ? "PREPARING…" : "PRINT / PDF"}
+        <span aria-hidden="true">↗</span>
+      </button>
+    </DocumentMeta>
+    {(printError || prepared.error) && <p className="vault-print-error" role="alert">
+      Could not prepare the document for printing. {(printError || prepared.error).message}
+    </p>}
+    <header className="vault-brief-masthead">
+      <span>MAX TRETIKOV / {documentKind.toUpperCase()}</span>
+      <strong>{source.label}</strong>
+      <div>
+        <span>{source.kind === "inline" ? source.label : `${source.owner}/${source.repo}`} / {file.repoPath || file.path}</span>
+        <span>REVISION / {formatCommit(snapshot.commitSha)}</span>
+      </div>
+    </header>
     <article
       className="vault-article"
       dangerouslySetInnerHTML={{ __html: rendered.html }}
       ref={articleRef}
     />
-  </>;
+  </div>;
 }
 
 function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }) {
@@ -1392,6 +1446,7 @@ function VaultView({ anchor, notePath, revision, source }) {
           />
           : file?.type === "markdown"
             ? <VaultReader
+              key={`${snapshot.commitSha}:${file.path}`}
               anchor={anchor}
               file={file}
               history={history}
@@ -1428,8 +1483,12 @@ export default function VaultApp({ route }) {
   const source = sources.find((candidate) => candidate.id === sourceId);
 
   useEffect(() => {
+    document.documentElement.dataset.view = "vault";
     document.body.dataset.view = "vault";
-    return () => { delete document.body.dataset.view; };
+    return () => {
+      delete document.documentElement.dataset.view;
+      delete document.body.dataset.view;
+    };
   }, []);
 
   if (!sourceId) return <ProjectsIndex sources={sources} />;
