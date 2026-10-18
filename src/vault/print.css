@@ -220,7 +220,14 @@
   .vault-brief .vault-article .transclude-label {
     padding: 7pt 10pt;
     font-size: 7pt;
+  }
+
+  .vault-brief .vault-article .callout-title {
     break-after: avoid;
+  }
+
+  .vault-brief .vault-article .transclude-label {
+    break-before: avoid;
   }
 
   .vault-brief .vault-article .callout-content,

@@ -75,7 +75,6 @@ function EmptyProjects() {
   return <main className="projects-empty">
     <div className="projects-empty-index">00</div>
     <section>
-      <p className="vault-eyebrow">REPOSITORY ARRAY / UNCONFIGURED</p>
       <h1>NO PUBLIC VAULTS<br />HAVE BEEN INDEXED.</h1>
       <p>
         Add a repository descriptor to <code>src/vault/sources.js</code>. The reader will
@@ -83,6 +82,7 @@ function EmptyProjects() {
         good copy in IndexedDB.
       </p>
       <a href="/" className="vault-action">RETURN TO FIELD <span>→</span></a>
+      <p className="vault-caption">REPOSITORY ARRAY / UNCONFIGURED</p>
     </section>
   </main>;
 }
@@ -123,7 +123,6 @@ function ProjectsIndex({ sources }) {
     <ProjectsHeader detail={`${String(sources.length).padStart(2, "0")} VAULT${sources.length === 1 ? "" : "S"}`} />
     {sources.length === 0 ? <EmptyProjects /> : <main className="projects-index">
       <div className="projects-intro">
-        <p className="vault-eyebrow">PUBLIC KNOWLEDGE SYSTEMS / LIVE REPOSITORIES</p>
         <h1>PROJECT<br />VAULTS</h1>
         <p className="projects-intro-copy" id="project-summary">
           {summaries[activeSource?.id] || "READING REPOSITORY DESCRIPTION…"}
@@ -146,9 +145,12 @@ function ProjectsIndex({ sources }) {
           <span className="project-card-arrow" aria-hidden="true">↗</span>
         </a>)}
       </div>
-      <div className="projects-axis" aria-hidden="true">
-        <span>LOCAL CACHE</span><i /><span>GITHUB HEAD</span><i /><span>QUARTZ OFM</span>
-      </div>
+      <footer className="vault-plate-meta">
+        <p>PUBLIC KNOWLEDGE SYSTEMS / LIVE REPOSITORIES</p>
+        <div className="projects-axis" aria-hidden="true">
+          <span>LOCAL CACHE</span><i /><span>GITHUB HEAD</span><i /><span>QUARTZ OFM</span>
+        </div>
+      </footer>
     </main>}
   </div>;
 }
@@ -341,18 +343,18 @@ async function expandTransclusions(scope, snapshot, parentPath, depth = 0, ances
     block.replaceChildren();
     block.dataset.hydrated = nodes.length ? "ready" : "missing-block";
     block.dataset.sourcePath = embedded.path;
-    if (block.dataset.embedAlias) {
-      const label = document.createElement("div");
-      label.className = "transclude-label";
-      label.textContent = block.dataset.embedAlias;
-      block.append(label);
-    }
     const content = document.createElement("div");
     content.className = "transclude-content";
     content.dataset.sourcePath = embedded.path;
     if (nodes.length) nodes.forEach((node) => content.append(node));
     else content.textContent = `Embedded block ${block.dataset.block || ""} was not found in ${embedded.path}.`;
     block.append(content);
+    if (block.dataset.embedAlias) {
+      const label = document.createElement("div");
+      label.className = "transclude-label";
+      label.textContent = block.dataset.embedAlias;
+      block.append(label);
+    }
 
     await expandTransclusions(
       content,
@@ -881,9 +883,9 @@ function VaultReader({
   };
 
   if (rendered.error) return <div className="vault-reader-error">
-    <p className="vault-eyebrow">RENDER FAILURE</p>
     <h2>THE NOTE COULD NOT BE TRANSFORMED.</h2>
     <pre>{rendered.error.message}</pre>
+    <p className="vault-caption">RENDER FAILURE</p>
   </div>;
 
   if (!rendered.html) return <div className="vault-reader-loading">TRANSFORMING NOTE / QUARTZ OFM…</div>;
@@ -911,12 +913,12 @@ function VaultReader({
       Could not prepare the document for printing. {(printError || prepared.error).message}
     </p>}
     <header className="vault-brief-masthead">
-      <span>MAX TRETIKOV / {documentKind.toUpperCase()}</span>
       <strong>{source.label}</strong>
       <div>
         <span>{source.kind === "inline" ? source.label : `${source.owner}/${source.repo}`} / {file.repoPath || file.path}</span>
         <span>REVISION / {formatCommit(snapshot.commitSha)}</span>
       </div>
+      <span>MAX TRETIKOV / {documentKind.toUpperCase()}</span>
     </header>
     <article
       className="vault-article"
@@ -941,9 +943,9 @@ function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }
       onHistory={onHistory}
     />
     <div className="vault-asset">
-      <p className="vault-eyebrow">REPOSITORY OBJECT / {extension}</p>
       <h1>{file.path.split("/").at(-1)}</h1>
       <dl>
+        <div><dt>TYPE</dt><dd>REPOSITORY OBJECT / {extension}</dd></div>
         <div><dt>PATH</dt><dd>{file.repoPath}</dd></div>
         <div><dt>OBJECT</dt><dd>{file.blobSha?.slice(0, 12) || "UNAVAILABLE"}</dd></div>
         <div><dt>SIZE</dt><dd>{file.size ? `${file.size.toLocaleString()} BYTES` : "UNAVAILABLE"}</dd></div>
@@ -1036,7 +1038,6 @@ function FileHistoryPanel({ file, history, onClose, snapshot, source }) {
   >
     <div className="vault-history-head">
       <div>
-        <p className="vault-eyebrow">FILE REVISION LOG / {history.transport || "PENDING"}</p>
         <h1 id="vault-file-history-title">{file.path.split("/").at(-1)}</h1>
         <code>{file.path}</code>
       </div>
@@ -1050,6 +1051,7 @@ function FileHistoryPanel({ file, history, onClose, snapshot, source }) {
     />
 
     <div className="vault-history-foot">
+      <span>FILE REVISION LOG / {history.transport || "PENDING"}</span>
       <span>VIEWED SNAPSHOT / {formatCommit(snapshot.commitSha)}</span>
       {githubHistoryUrl && <a href={githubHistoryUrl} rel="noreferrer" target="_blank">VERIFY ON GITHUB ↗</a>}
     </div>
@@ -1084,7 +1086,6 @@ function RepositoryHistoryPanel({
   >
     <div className="vault-history-head">
       <div>
-        <p className="vault-eyebrow">BRANCH REVISION LOG / {history.transport || "PENDING"}</p>
         <h1 id="vault-repository-history-title">{source.label} TREE</h1>
         <code>{sourceMetadata(source)}</code>
       </div>
@@ -1117,6 +1118,7 @@ function RepositoryHistoryPanel({
     />
 
     <div className="vault-history-foot">
+      <span>BRANCH REVISION LOG / {history.transport || "PENDING"}</span>
       <span>VIEWING / {formatCommit(currentSnapshot.commitSha)}</span>
       <span>HEAD / {formatCommit(headSnapshot.commitSha)}</span>
       {githubHistoryUrl && <a href={githubHistoryUrl} rel="noreferrer" target="_blank">VERIFY BRANCH ON GITHUB ↗</a>}
@@ -1126,10 +1128,10 @@ function RepositoryHistoryPanel({
 
 function MissingNote({ path, revision, source }) {
   return <div className="vault-reader-error">
-    <p className="vault-eyebrow">PATH RESOLUTION FAILURE</p>
     <h2>NOTE NOT FOUND.</h2>
     <code>{path}</code>
     <a className="vault-action" href={projectHref(source.id, null, { revision })}>OPEN VAULT ROOT <span>→</span></a>
+    <p className="vault-caption">PATH RESOLUTION FAILURE</p>
   </div>;
 }
 
@@ -1358,18 +1360,17 @@ function VaultView({ anchor, notePath, revision, source }) {
   if (!headSnapshot) return <div className="vault-screen">
     <ProjectsHeader detail={source.label} status={status} />
     <div className="vault-reader-error vault-source-error">
-      <p className="vault-eyebrow">REMOTE SOURCE FAILURE</p>
       <h2>NO LOCAL SNAPSHOT IS AVAILABLE.</h2>
       <pre>{warning?.message}</pre>
       <button className="vault-action" type="button" onClick={() => setAttempt((value) => value + 1)}>RETRY CONNECTION <span>→</span></button>
       <a className="vault-secondary-action" href="/projects">RETURN TO PROJECT INDEX</a>
+      <p className="vault-caption">REMOTE SOURCE FAILURE</p>
     </div>
   </div>;
 
   if (revision && checkout.status === "error") return <div className="vault-screen">
     <ProjectsHeader detail={source.label} status={status} />
     <div className="vault-reader-error vault-source-error">
-      <p className="vault-eyebrow">HISTORICAL SNAPSHOT FAILURE</p>
       <h2>THE REQUESTED COMMIT COULD NOT BE LOADED.</h2>
       <code>{revision}</code>
       <pre>{checkout.error?.message}</pre>
@@ -1384,6 +1385,7 @@ function VaultView({ anchor, notePath, revision, source }) {
       >
         RETURN TO HEAD <span>→</span>
       </a>
+      <p className="vault-caption">HISTORICAL SNAPSHOT FAILURE</p>
     </div>
   </div>;
 
@@ -1495,20 +1497,20 @@ export default function VaultApp({ route }) {
   if (revisionInvalid) return <div className="vault-screen">
     <ProjectsHeader detail="INVALID REVISION" status={{ label: "ROUTE ERROR", tone: "warn" }} />
     <div className="vault-reader-error vault-source-error">
-      <p className="vault-eyebrow">COMMIT LOOKUP REJECTED</p>
       <h2>A FULL 40-CHARACTER COMMIT SHA IS REQUIRED.</h2>
       <a className="vault-action" href={projectHref(sourceId, notePath)}>
         RETURN TO HEAD <span>→</span>
       </a>
+      <p className="vault-caption">COMMIT LOOKUP REJECTED</p>
     </div>
   </div>;
   if (!source) return <div className="vault-screen">
     <ProjectsHeader detail="UNKNOWN SOURCE" status={{ label: "ROUTE ERROR", tone: "warn" }} />
     <div className="vault-reader-error vault-source-error">
-      <p className="vault-eyebrow">PROJECT LOOKUP FAILURE</p>
       <h2>THE REQUESTED VAULT IS NOT CONFIGURED.</h2>
       <code>{sourceId}</code>
       <a className="vault-action" href="/projects">RETURN TO PROJECT INDEX <span>→</span></a>
+      <p className="vault-caption">PROJECT LOOKUP FAILURE</p>
     </div>
   </div>;
 
