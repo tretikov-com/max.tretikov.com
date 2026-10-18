@@ -1,6 +1,7 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import { execFileSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { secretAccessPlugin } from "./scripts/secret-access.mjs";
 
 const projectDir = fileURLToPath(new URL(".", import.meta.url));
 
@@ -29,11 +30,13 @@ function readGitMetadata() {
   return { revision, ...lineDelta };
 }
 
-export default defineConfig(() => {
+export default defineConfig(({ mode }) => {
   const { revision, additions, deletions } = readGitMetadata();
+  const env = loadEnv(mode, projectDir, "SECRET_PROJECT_ACCESS");
 
   return {
     base: "/",
+    plugins: [secretAccessPlugin(process.env.SECRET_PROJECT_ACCESS || env.SECRET_PROJECT_ACCESS)],
     define: {
       __GIT_REVISION__: JSON.stringify(revision),
       __GIT_ADDITIONS__: JSON.stringify(additions),

@@ -34,6 +34,8 @@ jobs:
       - name: Test renderer and vault model
         run: npm test
       - name: Build site
+        env:
+          SECRET_PROJECT_ACCESS: ${{ secrets.SECRET_PROJECT_ACCESS }}
         run: npm run build
       - name: Configure Pages
         uses: actions/configure-pages@v5

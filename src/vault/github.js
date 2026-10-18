@@ -26,11 +26,20 @@ function apiHeaders(extra = {}) {
   };
 }
 
-async function githubRequest(url, options = {}) {
+export async function githubRequest(source, url, options = {}) {
+  if (new URL(url).origin !== "https://api.github.com") {
+    throw new Error("Repository credentials may only be sent to the GitHub API.");
+  }
   const response = await fetch(url, {
     ...options,
     cache: "no-store",
-    headers: apiHeaders(options.headers),
+    signal: source.signal && options.signal
+      ? AbortSignal.any([source.signal, options.signal])
+      : options.signal || source.signal,
+    headers: apiHeaders({
+      ...(source.private ? { Authorization: `Bearer ${source.token}` } : {}),
+      ...options.headers,
+    }),
   });
 
   if (response.status === 304) return { response, data: null };
@@ -43,7 +52,9 @@ async function githubRequest(url, options = {}) {
     }
     const remaining = response.headers.get("x-ratelimit-remaining");
     const suffix = remaining === "0" ? " GitHub's public API rate limit is exhausted for this network." : "";
-    throw new Error(`GitHub returned ${response.status}${detail ? `: ${detail}` : ""}.${suffix}`);
+    const error = new Error(`GitHub returned ${response.status}${detail ? `: ${detail}` : ""}.${suffix}`);
+    error.status = response.status;
+    throw error;
   }
   return { response, data: await response.json() };
 }
@@ -120,23 +131,24 @@ export async function fetchProjectSummary(source, options = {}) {
     source.ref || "main",
     source.root || "",
   ].join("/");
-  if (projectSummaryCache.has(cacheKey)) return projectSummaryCache.get(cacheKey);
+  if (!source.private && projectSummaryCache.has(cacheKey)) return projectSummaryCache.get(cacheKey);
 
   const request = (async () => {
     try {
       const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}`;
-      const { data } = await githubRequest(url, { signal: options.signal });
+      const { data } = await githubRequest(source, url, { signal: options.signal });
       const description = String(data.description || "").trim();
       if (description) return description;
     } catch (error) {
       if (error.name === "AbortError") throw error;
     }
 
+    if (source.private) return `${source.owner}/${source.repo}`;
     const indexSummary = await fetchIndexSummary(source, options.signal);
     return indexSummary || `${source.owner}/${source.repo}`;
   })();
 
-  projectSummaryCache.set(cacheKey, request);
+  if (!source.private) projectSummaryCache.set(cacheKey, request);
   try {
     return await request;
   } catch (error) {
@@ -185,7 +197,7 @@ async function fetchCommit(source, ref, options = {}) {
   const encodedRef = encodeURIComponent(String(ref || source.ref || "main"));
   const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits/${encodedRef}`;
   const headers = options.etag ? { "If-None-Match": options.etag } : {};
-  const { response, data } = await githubRequest(url, {
+  const { response, data } = await githubRequest(source, url, {
     headers,
     signal: options.signal,
   });
@@ -194,7 +206,7 @@ async function fetchCommit(source, ref, options = {}) {
 
 async function fetchTree(source, treeSha, options = {}) {
   const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/git/trees/${encodeURIComponent(treeSha)}?recursive=1`;
-  const { data } = await githubRequest(url, { signal: options.signal });
+  const { data } = await githubRequest(source, url, { signal: options.signal });
   if (data.truncated) {
     throw new Error("This repository tree exceeds GitHub's recursive tree limit; subtree pagination is not implemented yet.");
   }
@@ -202,6 +214,11 @@ async function fetchTree(source, treeSha, options = {}) {
 }
 
 async function fetchMarkdown(source, commitSha, entry, options = {}) {
+  if (source.private) {
+    const { data } = await githubRequest(source, repositoryApiUrl(source, `git/blobs/${encodeURIComponent(entry.blobSha)}`), options);
+    if (data.encoding !== "base64") throw new Error("Unsupported GitHub blob encoding.");
+    return new TextDecoder().decode(decodeBase64(data.content));
+  }
   const response = await fetch(rawGithubUrl(source, commitSha, entry.repoPath), {
     signal: options.signal,
   });
@@ -238,6 +255,7 @@ async function materializeSnapshot(source, commit, previousSnapshot = null, opti
         path: relativePath,
         repoPath: entry.path,
         blobSha: entry.sha,
+        mode: entry.mode,
         size: entry.size || 0,
         type: isMarkdownPath(relativePath) ? "markdown" : "asset",
       };
@@ -342,7 +360,7 @@ export async function loadSnapshotAtCommit(
 
   validateGitHubSource(source);
   const requestedSha = requireFullCommitSha(fullSha);
-  const useCache = options.cache !== false;
+  const useCache = options.cache !== false && !source.private;
 
   if (useCache) {
     try {
@@ -407,7 +425,7 @@ async function fetchApiHistory(source, repositoryPath, options = {}) {
   if (repositoryPath) params.set("path", repositoryPath);
 
   const url = `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/commits?${params}`;
-  const { response, data } = await githubRequest(url, { signal: options.signal });
+  const { response, data } = await githubRequest(source, url, { signal: options.signal });
   const nextPage = nextPageFromLink(response.headers.get("link"));
   return {
     transport: "github-api",
@@ -434,7 +452,7 @@ export async function fetchFileHistory(source, repositoryPath, options = {}) {
     };
   }
 
-  if (source.webProxy) {
+  if (source.webProxy && !source.private) {
     const client = createGitHubWebClient({ webProxy: source.webProxy });
     const selectedRef = historyRef(source, options);
     const historySource = { ...source, ref: selectedRef };
@@ -464,7 +482,7 @@ export async function fetchRepositoryHistory(source, options = {}) {
     };
   }
 
-  if (source.webProxy) {
+  if (source.webProxy && !source.private) {
     const client = createGitHubWebClient({ webProxy: source.webProxy });
     const selectedRef = historyRef(source, options);
     const historySource = { ...source, ref: selectedRef };
@@ -481,4 +499,27 @@ export async function fetchRepositoryHistory(source, options = {}) {
   }
 
   return fetchApiHistory(source, null, options);
+}
+
+export function repositoryApiUrl(source, path) {
+  return `https://api.github.com/repos/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/${path}`;
+}
+
+function decodeBase64(value) {
+  return Uint8Array.from(atob(String(value).replace(/\s/g, "")), (character) => character.charCodeAt(0));
+}
+
+const ASSET_TYPES = {
+  png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif",
+  webp: "image/webp", avif: "image/avif", svg: "image/svg+xml", pdf: "application/pdf",
+  mp4: "video/mp4", webm: "video/webm", mp3: "audio/mpeg", ogg: "audio/ogg", wav: "audio/wav",
+};
+
+// The caller owns the object URL and must revoke it when the view unmounts.
+export async function assetObjectUrl(source, commitSha, file, options = {}) {
+  if (!source.private) return rawGithubUrl(source, commitSha, file.repoPath);
+  const { data } = await githubRequest(source, repositoryApiUrl(source, `git/blobs/${encodeURIComponent(file.blobSha)}`), options);
+  if (data.encoding !== "base64") throw new Error("Unsupported GitHub blob encoding.");
+  const extension = file.path.split(".").at(-1).toLowerCase();
+  return URL.createObjectURL(new Blob([decodeBase64(data.content)], { type: ASSET_TYPES[extension] || "application/octet-stream" }));
 }

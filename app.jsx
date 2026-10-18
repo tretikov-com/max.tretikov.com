@@ -21,6 +21,8 @@ import {
 
 const { useEffect, useMemo, useRef, useState } = React;
 const VaultApp = React.lazy(() => import("./src/vault/VaultApp.jsx"));
+const SecretApp = React.lazy(() => import("./src/secret/SecretApp.jsx"));
+const NdaPage = React.lazy(() => import("./src/secret/NdaPage.jsx"));
 const ResumeApp = React.lazy(() => import("./src/resume/ResumeApp.jsx"));
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -520,6 +522,18 @@ function Site() {
       document.removeEventListener("click", onDocumentClick);
     };
   }, []);
+
+  if (route.pathname === "/nda" || route.pathname === "/nda/") {
+    return <React.Suspense fallback={<div className="route-loading">LOADING AGREEMENT…</div>}>
+      <NdaPage />
+    </React.Suspense>;
+  }
+
+  if (route.pathname === "/projects/secret" || route.pathname.startsWith("/projects/secret/")) {
+    return <React.Suspense fallback={<div className="route-loading">LOADING COLLABORATOR ACCESS…</div>}>
+      <SecretApp route={route} />
+    </React.Suspense>;
+  }
 
   if (route.pathname === "/projects" || route.pathname.startsWith("/projects/")) {
     return <React.Suspense fallback={<div className="route-loading">LOADING PROJECT INDEX…</div>}>

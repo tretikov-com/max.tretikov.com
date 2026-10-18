@@ -86,6 +86,7 @@ async function hydrateSnapshot(db, source, commitSha, repository = null) {
 }
 
 export async function readActiveSnapshot(source) {
+  if (source?.private) return null;
   const repoId = typeof source === "string" ? source : source.id;
   const db = await database();
   const repository = await db.get("repositories", repoId);
@@ -94,6 +95,7 @@ export async function readActiveSnapshot(source) {
 }
 
 export async function readSnapshot(source, commitSha) {
+  if (source?.private) return null;
   const repoId = typeof source === "string" ? source : source?.id;
   const canonicalSha = String(commitSha || "").trim();
   if (!repoId || !canonicalSha) return null;
@@ -156,6 +158,7 @@ function snapshotRecord(source, snapshot) {
 }
 
 export async function saveSnapshot(source, snapshot, repositoryMetadata = {}) {
+  if (source.private) return { ...snapshot, repository: { ...repositoryMetadata, activeCommit: snapshot.commitSha } };
   const db = await database();
   const previousRepository = await db.get("repositories", source.id);
   const tx = db.transaction(["repositories", "snapshots", "files"], "readwrite");
@@ -184,6 +187,7 @@ export async function saveSnapshot(source, snapshot, repositoryMetadata = {}) {
 }
 
 export async function saveHistoricalSnapshot(source, snapshot) {
+  if (source.private) return snapshot;
   const db = await database();
   const repository = await db.get("repositories", source.id);
   if (
@@ -207,6 +211,7 @@ export async function saveHistoricalSnapshot(source, snapshot) {
 }
 
 export async function markRepositoryChecked(source, metadata = {}) {
+  if (source.private) return metadata;
   const db = await database();
   const previous = await db.get("repositories", source.id);
   const repository = {

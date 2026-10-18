@@ -153,7 +153,8 @@ function parseRevision(search = "") {
 }
 
 export function projectHref(sourceId, path, options = {}) {
-  const base = `/projects/${encodeURIComponent(sourceId)}`;
+  const source = typeof sourceId === "object" ? sourceId : { id: sourceId };
+  const base = `/projects/${source.private ? "secret/" : ""}${encodeURIComponent(source.id)}`;
   const pathname = path ? `${base}/${encodeNotePath(path)}` : base;
   const revision = isFullCommitSha(options.revision)
     ? String(options.revision).toLowerCase()
@@ -163,7 +164,7 @@ export function projectHref(sourceId, path, options = {}) {
 
 export function parseProjectsPath(pathname, hash = "", search = "") {
   const match = String(pathname || "").match(/^\/projects(?:\/(.*))?$/);
-  const raw = String(match?.[1] || "").replace(/\/+$/, "");
+  const raw = String(match?.[1] || "").replace(/\/+$/, "").replace(/^secret(?:\/|$)/, "");
   const revisionState = parseRevision(search);
   if (!raw) {
     return {

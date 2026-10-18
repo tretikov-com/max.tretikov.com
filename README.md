@@ -5,6 +5,12 @@ Obsidian vaults. The first configured project is
 [`MaxTretikov/rlqf`](https://github.com/MaxTretikov/rlqf); its `docs/` directory
 appears under **Projects → RLQF**.
 
+`/projects/secret` provides invited collaborators with password-gated access to
+private vaults, Markdown editing, and pull-request submission with contributor
+attribution in commit messages. Configure the shared token, repositories, and users
+in the `SECRET_PROJECT_ACCESS` GitHub Actions secret; see
+[Secret projects](docs/secret-projects.md) for setup and access management.
+
 ## Add a vault
 
 Add a descriptor to `VAULT_SOURCES` in `src/vault/sources.js`:

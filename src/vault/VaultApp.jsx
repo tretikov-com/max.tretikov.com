@@ -3,6 +3,7 @@ import "katex/dist/katex.min.css";
 import "./vault.css";
 import { readFileHistory, saveFileHistory } from "./cache.js";
 import {
+  assetObjectUrl,
   fetchFileHistory,
   fetchProjectSummary,
   fetchRepositoryHistory,
@@ -24,6 +25,7 @@ import { configuredSources } from "./sources.js";
 import { waitForPrintAssets } from "./print.js";
 import "./print.css";
 
+const VaultEditor = React.lazy(() => import("../secret/VaultEditor.jsx"));
 const EXTERNAL_PROTOCOL = /^(?:[a-z]+:|\/\/)/i;
 let rendererPromise;
 
@@ -71,7 +73,14 @@ function ProjectsHeader({ detail, status }) {
   </header>;
 }
 
-function EmptyProjects() {
+function EmptyProjects({ privateProjects = false }) {
+  if (privateProjects) return <main className="projects-empty">
+    <section>
+      <h1>NO PROJECTS<br />ASSIGNED YET.</h1>
+      <p>Max can add projects to your account. Sign in again after your access has been updated.</p>
+      <p className="vault-caption">COLLABORATOR ACCESS</p>
+    </section>
+  </main>;
   return <main className="projects-empty">
     <div className="projects-empty-index">00</div>
     <section>
@@ -87,7 +96,7 @@ function EmptyProjects() {
   </main>;
 }
 
-function ProjectsIndex({ sources }) {
+function ProjectsIndex({ sources, privateProjects }) {
   const [activeSourceId, setActiveSourceId] = useState(sources[0]?.id || null);
   const [summaries, setSummaries] = useState({});
   const activeSource = sources.find((source) => source.id === activeSourceId) || sources[0];
@@ -121,18 +130,19 @@ function ProjectsIndex({ sources }) {
 
   return <div className="vault-screen">
     <ProjectsHeader detail={`${String(sources.length).padStart(2, "0")} VAULT${sources.length === 1 ? "" : "S"}`} />
-    {sources.length === 0 ? <EmptyProjects /> : <main className="projects-index">
+    {sources.length === 0 ? <EmptyProjects privateProjects={privateProjects} /> : <main className="projects-index">
       <div className="projects-intro">
-        <h1>PROJECT<br />VAULTS</h1>
+        <h1>{privateProjects ? "SECRET" : "PROJECT"}<br />VAULTS</h1>
         <p className="projects-intro-copy" id="project-summary">
-          {summaries[activeSource?.id] || "READING REPOSITORY DESCRIPTION…"}
+          {summaries[activeSource?.id] || (sources.length ? "READING REPOSITORY DESCRIPTION…" : "No projects assigned.")}
         </p>
+        <p><a className="vault-secondary-action" href={privateProjects ? "/projects" : "/projects/secret"}>{privateProjects ? "PUBLIC PROJECTS ↗" : "SECRET PROJECTS / SIGN IN ↗"}</a></p>
       </div>
       <div className="project-list">
         {sources.map((source, index) => <a
           aria-describedby="project-summary"
           className="project-card"
-          href={projectHref(source.id)}
+          href={projectHref(source)}
           key={source.id}
           onFocus={() => setActiveSourceId(source.id)}
           onMouseEnter={() => setActiveSourceId(source.id)}
@@ -146,9 +156,9 @@ function ProjectsIndex({ sources }) {
         </a>)}
       </div>
       <footer className="vault-plate-meta">
-        <p>PUBLIC KNOWLEDGE SYSTEMS / LIVE REPOSITORIES</p>
+        <p>{privateProjects ? "PRIVATE RESEARCH / COLLABORATOR ACCESS" : "PUBLIC KNOWLEDGE SYSTEMS / LIVE REPOSITORIES"}</p>
         <div className="projects-axis" aria-hidden="true">
-          <span>LOCAL CACHE</span><i /><span>GITHUB HEAD</span><i /><span>QUARTZ OFM</span>
+          <span>{privateProjects ? "PRIVATE SESSION" : "LOCAL CACHE"}</span><i /><span>GITHUB HEAD</span><i /><span>QUARTZ OFM</span>
         </div>
       </footer>
     </main>}
@@ -259,7 +269,7 @@ function VaultSidebar({
           node={node}
           onFileSelect={onFileSelect}
           revision={revision}
-          sourceId={source.id}
+          sourceId={source}
         />)}
       </ul>
     </nav>
@@ -426,7 +436,7 @@ function useSelectedFileHistory(source, snapshot, file) {
     const load = async () => {
       let cached = null;
       try {
-        cached = source.kind === "inline"
+        cached = source.kind === "inline" || source.private
           ? null
           : await readFileHistory(source.id, file.repoPath, snapshot.commitSha, 1);
       } catch {
@@ -467,7 +477,7 @@ function useSelectedFileHistory(source, snapshot, file) {
         requestKey,
       };
       setHistory(normalized);
-      if (source.kind !== "inline") {
+      if (source.kind !== "inline" && !source.private) {
         saveFileHistory(source.id, file.repoPath, snapshot.commitSha, 1, cacheable).catch(() => {});
       }
     };
@@ -518,7 +528,7 @@ function useSelectedFileHistory(source, snapshot, file) {
       : previous);
 
     try {
-      let next = source.kind === "inline"
+      let next = source.kind === "inline" || source.private
         ? null
         : await readFileHistory(source.id, file.repoPath, snapshot.commitSha, pageKey);
       if (!next) {
@@ -530,7 +540,7 @@ function useSelectedFileHistory(source, snapshot, file) {
           page: history.transport === "github-api" ? pageKey : undefined,
           after: history.transport === "github-web" ? pageKey : undefined,
         });
-        if (source.kind !== "inline") {
+        if (source.kind !== "inline" && !source.private) {
           saveFileHistory(
             source.id,
             file.repoPath,
@@ -773,7 +783,7 @@ function VaultReader({
       link.dataset.vaultTarget = href;
 
       if (href.startsWith("#")) {
-        link.setAttribute("href", `${projectHref(source.id, file.path, { revision })}${href}`);
+        link.setAttribute("href", `${projectHref(source, file.path, { revision })}${href}`);
         return;
       }
 
@@ -783,7 +793,7 @@ function VaultReader({
         snapshot.files.map((candidate) => candidate.path),
       );
       if (target) {
-        link.setAttribute("href", `${projectHref(source.id, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`);
+        link.setAttribute("href", `${projectHref(source, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`);
         return;
       }
 
@@ -794,7 +804,7 @@ function VaultReader({
         snapshot.files.map((candidate) => candidate.path),
       );
       if (assetPath) {
-        link.setAttribute("href", projectHref(source.id, assetPath, { revision }));
+        link.setAttribute("href", projectHref(source, assetPath, { revision }));
         return;
       }
 
@@ -811,6 +821,8 @@ function VaultReader({
     };
 
     let cancelled = false;
+    const assetController = new AbortController();
+    const assetUrls = [];
     const prepare = async () => {
       await expandTransclusions(article, snapshot, file.path, 0, new Set([file.path]));
       if (cancelled) return;
@@ -824,7 +836,16 @@ function VaultReader({
 
       const allPaths = snapshot.files.map((candidate) => candidate.path);
       const assetNodes = article.querySelectorAll("img[src], video[src], audio[src], source[src], iframe[src], object[data]");
-      assetNodes.forEach((node) => {
+      await Promise.all([...assetNodes].map(async (originalNode) => {
+        let node = originalNode;
+        if (source.private && node.tagName === "OBJECT") {
+          const frame = document.createElement("iframe");
+          frame.setAttribute("src", node.getAttribute("data") || "");
+          frame.setAttribute("title", "Embedded project attachment");
+          node.replaceWith(frame);
+          node = frame;
+        }
+        if (source.private && node.tagName === "IFRAME") node.setAttribute("sandbox", "");
         const attribute = node.tagName === "OBJECT" ? "data" : "src";
         const sourceUrl = node.getAttribute(attribute);
         if (!sourceUrl || EXTERNAL_PROTOCOL.test(sourceUrl) || sourceUrl.startsWith("data:")) return;
@@ -832,9 +853,20 @@ function VaultReader({
         const assetPath = resolveAssetTarget(sourceUrl, contextPath, allPaths);
         const asset = snapshot.files.find((candidate) => candidate.path === assetPath);
         if (asset && source.kind !== "inline") {
-          node.setAttribute(attribute, rawGithubUrl(source, snapshot.commitSha, asset.repoPath));
+          if (source.private) node.removeAttribute(attribute);
+          try {
+            const url = await assetObjectUrl(source, snapshot.commitSha, asset, { signal: assetController.signal });
+            if (source.private) {
+              if (cancelled) { URL.revokeObjectURL(url); return; }
+              assetUrls.push(url);
+            }
+            node.setAttribute(attribute, url);
+          } catch {
+            node.setAttribute("aria-label", "Attachment unavailable");
+          }
         }
-      });
+      }));
+      if (cancelled) return;
 
       const diagrams = [...article.querySelectorAll("code.mermaid")];
       if (!diagrams.length) return;
@@ -865,6 +897,8 @@ function VaultReader({
 
     return () => {
       cancelled = true;
+      assetController.abort();
+      assetUrls.forEach((url) => URL.revokeObjectURL(url));
     };
   }, [anchor, file.path, rendered.html, revision, snapshot, source]);
 
@@ -928,11 +962,35 @@ function VaultReader({
   </div>;
 }
 
+function useAssetUrl(source, snapshot, file) {
+  const [asset, setAsset] = useState({ key: null, url: null, error: null });
+  const key = `${snapshot.commitSha}:${file.path}`;
+  useEffect(() => {
+    if (!source.private) return;
+    const controller = new AbortController();
+    let live = true;
+    let objectUrl;
+    assetObjectUrl(source, snapshot.commitSha, file, { signal: controller.signal })
+      .then((url) => {
+        if (!live) { URL.revokeObjectURL(url); return; }
+        objectUrl = url;
+        setAsset({ key, url, error: null });
+      })
+      .catch((error) => { if (live) setAsset({ key, url: null, error }); });
+    return () => {
+      live = false;
+      controller.abort();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [key, source]);
+  if (source.kind === "inline") return { url: null, error: null };
+  if (!source.private) return { url: rawGithubUrl(source, snapshot.commitSha, file.repoPath), error: null };
+  return asset.key === key ? asset : { url: null, error: null };
+}
+
 function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }) {
   const extension = file.path.split(".").pop()?.toUpperCase() || "FILE";
-  const rawUrl = source.kind === "inline"
-    ? null
-    : rawGithubUrl(source, snapshot.commitSha, file.repoPath);
+  const { url: rawUrl, error } = useAssetUrl(source, snapshot, file);
   const image = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(file.path);
 
   return <>
@@ -944,6 +1002,7 @@ function AssetReader({ file, history, historyOpen, onHistory, snapshot, source }
     />
     <div className="vault-asset">
       <h1>{file.path.split("/").at(-1)}</h1>
+      {error && <p role="alert">{error.message}</p>}
       <dl>
         <div><dt>TYPE</dt><dd>REPOSITORY OBJECT / {extension}</dd></div>
         <div><dt>PATH</dt><dd>{file.repoPath}</dd></div>
@@ -1130,7 +1189,7 @@ function MissingNote({ path, revision, source }) {
   return <div className="vault-reader-error">
     <h2>NOTE NOT FOUND.</h2>
     <code>{path}</code>
-    <a className="vault-action" href={projectHref(source.id, null, { revision })}>OPEN VAULT ROOT <span>→</span></a>
+    <a className="vault-action" href={projectHref(source, null, { revision })}>OPEN VAULT ROOT <span>→</span></a>
     <p className="vault-caption">PATH RESOLUTION FAILURE</p>
   </div>;
 }
@@ -1147,6 +1206,9 @@ function VaultView({ anchor, notePath, revision, source }) {
   const [warning, setWarning] = useState(null);
   const [attempt, setAttempt] = useState(0);
   const [historyMode, setHistoryMode] = useState(null);
+  const [editor, setEditor] = useState(null);
+
+  useEffect(() => { setEditor(null); }, [notePath, revision]);
   const repositoryButtonRef = useRef(null);
   const repositoryPanelRef = useRef(null);
 
@@ -1299,7 +1361,7 @@ function VaultView({ anchor, notePath, revision, source }) {
       || requestedFile
       || !snapshot.initialNote
     ) return;
-    navigateTo(projectHref(source.id, snapshot.initialNote, { revision }), { replace: true });
+    navigateTo(projectHref(source, snapshot.initialNote, { revision }), { replace: true });
   }, [
     checkout.status,
     notePath,
@@ -1329,7 +1391,7 @@ function VaultView({ anchor, notePath, revision, source }) {
       ? selectedPath
       : targetSnapshot?.initialNote || selectedPath;
     navigateTo(
-      `${projectHref(source.id, targetPath, { revision: normalizedRevision })}${window.location.hash}`,
+      `${projectHref(source, targetPath, { revision: normalizedRevision })}${window.location.hash}`,
     );
     setHistoryMode(null);
   };
@@ -1363,7 +1425,7 @@ function VaultView({ anchor, notePath, revision, source }) {
       <h2>NO LOCAL SNAPSHOT IS AVAILABLE.</h2>
       <pre>{warning?.message}</pre>
       <button className="vault-action" type="button" onClick={() => setAttempt((value) => value + 1)}>RETRY CONNECTION <span>→</span></button>
-      <a className="vault-secondary-action" href="/projects">RETURN TO PROJECT INDEX</a>
+      <a className="vault-secondary-action" href={source.private ? "/projects/secret" : "/projects"}>RETURN TO PROJECT INDEX</a>
       <p className="vault-caption">REMOTE SOURCE FAILURE</p>
     </div>
   </div>;
@@ -1377,7 +1439,7 @@ function VaultView({ anchor, notePath, revision, source }) {
       <a
         className="vault-action"
         href={projectHref(
-          source.id,
+          source,
           notePath && findFile(headSnapshot, notePath)
             ? notePath
             : headSnapshot.initialNote,
@@ -1427,7 +1489,14 @@ function VaultView({ anchor, notePath, revision, source }) {
         aria-busy={checkout.status === "loading"}
         className="vault-reader"
       >
-        {historyMode === "repository"
+        {source.private && !editor && <div className="secret-tools">
+          {revision && <span>VIEWING HISTORY / RETURN TO HEAD TO EDIT</span>}
+          <button type="button" disabled={Boolean(revision) || file?.type !== "markdown" || file?.mode === "120000"} onClick={() => { setHistoryMode(null); setEditor({ file, snapshot }); }}>EDIT NOTE</button>
+          <button type="button" disabled={Boolean(revision)} onClick={() => { setHistoryMode(null); setEditor({ file: null, snapshot }); }}>NEW NOTE +</button>
+        </div>}
+        {editor ? <React.Suspense fallback={<p>LOADING EDITOR…</p>}>
+          <VaultEditor file={editor.file} snapshot={editor.snapshot} source={source} onClose={() => setEditor(null)} />
+        </React.Suspense> : historyMode === "repository"
           ? <RepositoryHistoryPanel
             currentSnapshot={snapshot}
             headSnapshot={headSnapshot}
@@ -1473,8 +1542,9 @@ function VaultView({ anchor, notePath, revision, source }) {
   </div>;
 }
 
-export default function VaultApp({ route }) {
-  const sources = useMemo(() => configuredSources(), []);
+export default function VaultApp({ route, sources: suppliedSources, privateProjects = false }) {
+  const publicSources = useMemo(() => configuredSources(), []);
+  const sources = suppliedSources || publicSources;
   const {
     anchor,
     notePath,
@@ -1493,12 +1563,12 @@ export default function VaultApp({ route }) {
     };
   }, []);
 
-  if (!sourceId) return <ProjectsIndex sources={sources} />;
+  if (!sourceId) return <ProjectsIndex sources={sources} privateProjects={privateProjects} />;
   if (revisionInvalid) return <div className="vault-screen">
     <ProjectsHeader detail="INVALID REVISION" status={{ label: "ROUTE ERROR", tone: "warn" }} />
     <div className="vault-reader-error vault-source-error">
       <h2>A FULL 40-CHARACTER COMMIT SHA IS REQUIRED.</h2>
-      <a className="vault-action" href={projectHref(sourceId, notePath)}>
+      <a className="vault-action" href={projectHref({ id: sourceId, private: privateProjects }, notePath)}>
         RETURN TO HEAD <span>→</span>
       </a>
       <p className="vault-caption">COMMIT LOOKUP REJECTED</p>
@@ -1509,12 +1579,13 @@ export default function VaultApp({ route }) {
     <div className="vault-reader-error vault-source-error">
       <h2>THE REQUESTED VAULT IS NOT CONFIGURED.</h2>
       <code>{sourceId}</code>
-      <a className="vault-action" href="/projects">RETURN TO PROJECT INDEX <span>→</span></a>
+      <a className="vault-action" href={privateProjects ? "/projects/secret" : "/projects"}>RETURN TO PROJECT INDEX <span>→</span></a>
       <p className="vault-caption">PROJECT LOOKUP FAILURE</p>
     </div>
   </div>;
 
   return <VaultView
+    key={`${source.private ? "private" : "public"}:${source.id}`}
     anchor={anchor}
     notePath={notePath}
     revision={revision}
