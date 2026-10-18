@@ -97,15 +97,16 @@ function removeQuartzMermaidChrome() {
   };
 }
 
-function addFilenameTitle() {
+function addFilenameTitle(repositoryName) {
   return (tree, file) => {
     if (tree.children.some((node) => node.type === "element" && node.tagName === "h1")) return;
-    const filename = normalizePath(file.path).split("/").pop();
+    const filename = normalizePath(file.path).split("/").pop().replace(/\.(?:md|markdown|mdown)$/i, "");
+    const title = /^readme$/i.test(filename) && repositoryName ? repositoryName : filename;
     tree.children.unshift({
       type: "element",
       tagName: "h1",
       properties: {},
-      children: [{ type: "text", value: filename.replace(/\.(?:md|markdown|mdown)$/i, "") }],
+      children: [{ type: "text", value: title }],
     });
   };
 }
@@ -131,7 +132,7 @@ export async function renderMarkdown(markdown, options = {}) {
     .use(removeQuartzMermaidChrome)
     .use(rehypeSanitize, sanitizeSchema)
     .use(rehypeSlug)
-    .use(addFilenameTitle)
+    .use(addFilenameTitle, options.repositoryName)
     .use(rehypeKatex, { output: "htmlAndMathml", throwOnError: false })
     .use(rehypeStringify);
 

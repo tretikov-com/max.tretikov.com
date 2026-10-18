@@ -325,7 +325,7 @@ function transclusionNodes(container, blockReference) {
   return nodes;
 }
 
-async function expandTransclusions(scope, snapshot, parentPath, depth = 0, ancestry = new Set()) {
+async function expandTransclusions(scope, snapshot, parentPath, repositoryName, depth = 0, ancestry = new Set()) {
   const placeholders = [...scope.querySelectorAll("blockquote.transclude:not([data-hydrated])")];
   const paths = snapshot.files.map((candidate) => candidate.path);
 
@@ -345,7 +345,7 @@ async function expandTransclusions(scope, snapshot, parentPath, depth = 0, ances
     const embedded = findFile(snapshot, target.path);
     if (!embedded) continue;
     const { renderMarkdown } = await loadRenderer();
-    const result = await renderMarkdown(embedded.content || "", { path: embedded.path });
+    const result = await renderMarkdown(embedded.content || "", { path: embedded.path, repositoryName });
     const parsed = document.createElement("div");
     parsed.innerHTML = result.html;
     const nodes = transclusionNodes(parsed, block.dataset.block || "");
@@ -370,24 +370,25 @@ async function expandTransclusions(scope, snapshot, parentPath, depth = 0, ances
       content,
       snapshot,
       embedded.path,
+      repositoryName,
       depth + 1,
       new Set([...ancestry, target.path]),
     );
   }
 }
 
-function useRenderedNote(file) {
+function useRenderedNote(file, repositoryName) {
   const [rendered, setRendered] = useState({ html: "", frontmatter: {}, hasMermaid: false, error: null });
 
   useEffect(() => {
     let live = true;
     setRendered((previous) => ({ ...previous, html: "", error: null }));
     loadRenderer()
-      .then(({ renderMarkdown }) => renderMarkdown(file?.content || "", { path: file?.path || "index.md" }))
+      .then(({ renderMarkdown }) => renderMarkdown(file?.content || "", { path: file?.path || "index.md", repositoryName }))
       .then((result) => live && setRendered({ ...result, error: null }))
       .catch((error) => live && setRendered({ html: "", frontmatter: {}, hasMermaid: false, error }));
     return () => { live = false; };
-  }, [file?.path, file?.blobSha, file?.content]);
+  }, [file?.path, file?.blobSha, file?.content, repositoryName]);
 
   return rendered;
 }
@@ -758,7 +759,8 @@ function VaultReader({
   source,
 }) {
   const articleRef = useRef(null);
-  const rendered = useRenderedNote(file);
+  const repositoryName = source.repo || source.label;
+  const rendered = useRenderedNote(file, repositoryName);
   const documentKind = /(?:^|\/)readme\.md(?:own)?$/i.test(file.path)
     || file.path === snapshot.initialNote ? "Project Brief" : "Project Note";
   const [prepared, setPrepared] = useState({ html: null, error: null });
@@ -824,7 +826,7 @@ function VaultReader({
     const assetController = new AbortController();
     const assetUrls = [];
     const prepare = async () => {
-      await expandTransclusions(article, snapshot, file.path, 0, new Set([file.path]));
+      await expandTransclusions(article, snapshot, file.path, repositoryName, 0, new Set([file.path]));
       if (cancelled) return;
       article.querySelectorAll("a[href]").forEach(prepareLink);
 
@@ -900,7 +902,7 @@ function VaultReader({
       assetController.abort();
       assetUrls.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [anchor, file.path, rendered.html, revision, snapshot, source]);
+  }, [anchor, file.path, rendered.html, repositoryName, revision, snapshot, source]);
 
   const printBrief = async () => {
     setPrinting(true);
