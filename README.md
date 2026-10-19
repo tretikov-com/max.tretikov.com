@@ -11,6 +11,53 @@ attribution in commit messages. Configure the shared token, repositories, and us
 in the `SECRET_PROJECT_ACCESS` GitHub Actions secret; see
 [Secret projects](docs/secret-projects.md) for setup and access management.
 
+## Blog
+
+`/blog` publishes GitHub Discussions from the site's public repository, using the
+**Announcements** category. Create or edit a discussion in
+[`tretikov-com/max.tretikov.com`](https://github.com/tretikov-com/max.tretikov.com/discussions/categories/announcements)
+to publish a post. Its discussion number is its stable URL, such as `/blog/12`.
+The discussion title and Markdown body are the post title and content. Moving a
+discussion out of Announcements or deleting it unpublishes the post on the next build.
+
+GitHub Actions rebuilds the site when discussions are created, edited, deleted,
+transferred, or moved between categories. The build reads all pages of posts with
+the workflow's `GITHUB_TOKEN` and `discussions: read` permission. Credentials stay
+in the build process. The browser receives only the public snapshot in
+`src/blog/posts.json`. Post content updates when the Pages deployment completes.
+
+Comments and reactions use [giscus](https://giscus.app), mapped by discussion number
+to the post itself. Install the [giscus GitHub app](https://github.com/apps/giscus)
+for **only this repository** to enable the embedded conversation. Readers sign in
+with their own GitHub account to participate, and can also use the direct GitHub
+link. Moderation happens in Discussions. Comments and reactions update live without
+a site rebuild.
+
+`src/blog/config.js` selects the repository and category. To refresh the saved
+snapshot locally, use `npm run sync:blog` with an authenticated `gh` CLI or a
+`GITHUB_TOKEN` / `GH_TOKEN` with Discussions read access. `npm run build` refreshes
+the snapshot when either token is set; otherwise it uses the saved snapshot so
+local development works without GitHub credentials. A configured sync fails the
+build on API errors rather than publishing an incomplete blog.
+
+The index fans the newest eight posts out from the central **Blog.** heading, using
+fixed positions. New posts take the first position and shift the others through
+the sequence. Older posts appear in a chronological archive below, initially
+showing 20 entries with a **Show more posts** control. Hover or keyboard focus
+shows an excerpt; selecting a title opens the post. Numbers and dates in
+`DD Mon YYYY` format appear on every post link. Below 960px, the titles form a
+readable stack. When there are no published posts, the localhost dev server uses
+the examples in `src/blog/dev-posts.js`. These examples are excluded from
+production builds and never create GitHub discussions.
+
+The procedural background crossfades between two Canvas 2D layers. Selecting a
+post generates a fresh burst with a seed derived from its discussion number and
+an origin behind that link. Each selection or resize needs one new drawing;
+there is no persistent animation loop. Each layer's backing resolution is capped
+at 1.5× and 1.4 million pixels, with fewer fragments on smaller canvases. Small
+screens retain the central burst. Canvas observers and pending resize frames are
+released when leaving the blog index.
+
 ## Add a vault
 
 Add a descriptor to `VAULT_SOURCES` in `src/vault/sources.js`:

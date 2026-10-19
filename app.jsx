@@ -24,6 +24,7 @@ const VaultApp = React.lazy(() => import("./src/vault/VaultApp.jsx"));
 const SecretApp = React.lazy(() => import("./src/secret/SecretApp.jsx"));
 const NdaPage = React.lazy(() => import("./src/secret/NdaPage.jsx"));
 const ResumeApp = React.lazy(() => import("./src/resume/ResumeApp.jsx"));
+const BlogApp = React.lazy(() => import("./src/blog/BlogApp.jsx"));
 
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const fx2 = (n) => n.toFixed(1);
@@ -39,7 +40,7 @@ const FACETS = [
 const NAV_ITEMS = [
   { label: "PROJECTS", href: "/projects" },
   { label: "RESUME", href: "/resume" },
-  // { label: "BLOG", href: "/blog" },
+  { label: "BLOG", href: "/blog" },
   // { label: "PAPERS", href: "/papers" },
   { label: "PROFILES", href: "/profiles" },
 ];
@@ -544,6 +545,12 @@ function Site() {
   if (route.pathname === "/resume" || route.pathname === "/resume/") {
     return <React.Suspense fallback={<div className="route-loading">LOADING RÉSUMÉ…</div>}>
       <ResumeApp />
+    </React.Suspense>;
+  }
+
+  if (route.pathname === "/blog" || route.pathname.startsWith("/blog/")) {
+    return <React.Suspense fallback={<div className="route-loading">LOADING BLOG…</div>}>
+      <BlogApp route={route} />
     </React.Suspense>;
   }
 

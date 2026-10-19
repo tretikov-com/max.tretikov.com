@@ -3,10 +3,13 @@ name: Deploy Max to GitHub Pages
 on:
   push:
     branches: [main]
+  discussion:
+    types: [created, edited, deleted, category_changed, transferred]
   workflow_dispatch:
 
 permissions:
   contents: read
+  discussions: read
   pages: write
   id-token: write
 
@@ -31,10 +34,11 @@ jobs:
           git config --global --add url."https://github.com/".insteadOf git@github.com:
       - name: Install dependencies
         run: npm ci
-      - name: Test renderer and vault model
+      - name: Test site
         run: npm test
       - name: Build site
         env:
+          GITHUB_TOKEN: ${{ github.token }}
           SECRET_PROJECT_ACCESS: ${{ secrets.SECRET_PROJECT_ACCESS }}
         run: npm run build
       - name: Configure Pages
