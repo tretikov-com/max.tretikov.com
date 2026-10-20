@@ -1,3 +1,5 @@
+import { burstFragmentPose } from "./burst-motion.js";
+
 function randomSource(seed) {
   return () => {
     seed |= 0;
@@ -147,7 +149,7 @@ export function createBurstGeometry(width, height, colors, seed, origin) {
 
 // This mirrors the vertex shader only when a hover interrupts an unfinished tween.
 // Sampling once lets the next transition start from each fragment's current pose.
-export function sampleBurstGeometry(from, to, progress) {
+export function sampleBurstGeometry(from, to, progress, transition) {
   if (progress >= 1) return to;
   if (progress <= 0) return from;
   const result = new Float32Array(to);
@@ -155,27 +157,16 @@ export function sampleBurstGeometry(from, to, progress) {
   for (let index = 0; index < to.length; index += BURST_VERTEX_STRIDE) {
     const id = to[index + 11];
     if (!poses[id]) {
-      const t = Math.max(0, Math.min(1, (progress - to[index + 8]) / (1 - to[index + 8])));
-      const eased = t * t * (3 - 2 * t);
-      const wave = Math.sin(Math.PI * t);
-      const angle = wave * to[index + 9];
-      const dx = to[index + 2] - from[index + 2];
-      const dy = to[index + 3] - from[index + 3];
-      const distance = Math.hypot(dx, dy) || 1;
-      poses[id] = {
-        eased, cos: Math.cos(angle), sin: Math.sin(angle),
-        x: from[index + 2] + dx * eased - dy / distance * wave * to[index + 10],
-        y: from[index + 3] + dy * eased + dx / distance * wave * to[index + 10],
-      };
+      poses[id] = burstFragmentPose(from[index + 2], from[index + 3], to[index + 2], to[index + 3], to[index + 8], to[index + 9], to[index + 10], progress, transition);
     }
     const pose = poses[id];
     const x = from[index] - from[index + 2] + (to[index] - to[index + 2] - from[index] + from[index + 2]) * pose.eased;
     const y = from[index + 1] - from[index + 3] + (to[index + 1] - to[index + 3] - from[index + 1] + from[index + 3]) * pose.eased;
-    result[index] = pose.x + pose.cos * x - pose.sin * y;
-    result[index + 1] = pose.y + pose.sin * x + pose.cos * y;
+    result[index] = pose.x + (pose.cos * x - pose.sin * y) * pose.scale;
+    result[index + 1] = pose.y + (pose.sin * x + pose.cos * y) * pose.scale;
     result[index + 2] = pose.x;
     result[index + 3] = pose.y;
-    for (let channel = 4; channel < 8; channel++) result[index + channel] = from[index + channel] + (to[index + channel] - from[index + channel]) * pose.eased;
+    for (let channel = 4; channel < 8; channel++) result[index + channel] = from[index + channel] + (to[index + channel] - from[index + channel]) * pose.colorMix;
   }
   return result;
 }

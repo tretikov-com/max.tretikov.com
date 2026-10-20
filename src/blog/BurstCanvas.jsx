@@ -1,8 +1,8 @@
 import React, { useEffect, useRef } from "react";
 import { createBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
 import { createBurstRenderer } from "./burst-renderer.js";
+import { createBurstTransition } from "./burst-motion.js";
 
-const TWEEN_MS = 650;
 const ease = (t) => t * t * (3 - 2 * t);
 const mixPoint = (from, to, t) => ({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
 
@@ -39,9 +39,10 @@ export default function BurstCanvas({ positions, active, originLetter }) {
     const measurement = document.createElement("canvas").getContext("2d");
     let renderer = createBurstRenderer(canvas);
     if (!renderer) return;
-    let dimensions, from, to, fromEye, toEye, started = 0, frame = 0, resizeFrame = 0, previousSize = "", animationFrames = 0, lastPaint = 0, unavailable = false;
+    let dimensions, from, to, fromEye, toEye, choreography, sequence = 0, previousSeed = 43107, started = 0, frame = 0, resizeFrame = 0, previousSize = "", animationFrames = 0, lastPaint = 0, unavailable = false;
     const cache = new Map();
-    const progressAt = (time) => frame ? Math.min(1, Math.max(0, (time - started) / TWEEN_MS)) : 1;
+    const recentModes = [];
+    const progressAt = (time) => frame ? Math.min(1, Math.max(0, (time - started) / choreography.duration)) : 1;
     const draw = (progress) => {
       renderer.draw(progress, mixPoint(fromEye, toEye, ease(progress)), dimensions.eye.radius);
       if (import.meta.env.DEV) {
@@ -67,7 +68,7 @@ export default function BurstCanvas({ positions, active, originLetter }) {
       if (!dimensions || unavailable) return;
       const now = performance.now();
       const previousProgress = progressAt(now);
-      const source = to && { vertices: sampleBurstGeometry(from.vertices, to.vertices, previousProgress) };
+      const source = to && { vertices: sampleBurstGeometry(from.vertices, to.vertices, previousProgress, choreography) };
       const sourceEye = toEye && mixPoint(fromEye, toEye, ease(previousProgress));
       cancelAnimationFrame(frame);
       frame = 0;
@@ -85,7 +86,11 @@ export default function BurstCanvas({ positions, active, originLetter }) {
       from = source || to;
       fromEye = sourceEye || origin;
       toEye = origin;
-      renderer.setGeometry(from, to);
+      choreography = createBurstTransition(seed ^ previousSeed ^ Math.imul(++sequence, 2654435761), recentModes, origin);
+      recentModes.push(choreography.mode);
+      if (recentModes.length > 2) recentModes.shift();
+      previousSeed = seed;
+      renderer.setGeometry(from, to, choreography);
       if (import.meta.env.DEV) {
         canvas.dataset.renderer = renderer.animated ? "webgl" : "2d";
         canvas.dataset.geometryBuilds = Number(canvas.dataset.geometryBuilds || 0) + Number(!cached);
@@ -93,6 +98,8 @@ export default function BurstCanvas({ positions, active, originLetter }) {
         canvas.dataset.pathCacheHit = String(cached);
         canvas.dataset.seed = seed;
         canvas.dataset.origin = `${origin.x.toFixed(1)},${origin.y.toFixed(1)}`;
+        canvas.dataset.choreography = ["hook", "recoil", "fold", "sweep"][choreography.mode];
+        canvas.dataset.duration = choreography.duration;
       }
       if (immediate || !renderer.animated || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         from = to;

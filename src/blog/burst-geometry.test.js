@@ -45,7 +45,7 @@ test("interrupted reconstruction starts from the sampled pose without a position
   const interrupted = sampleBurstGeometry(from, to, .31);
   const next = geometry(9002, 1200, { x: 252, y: 496 });
   assert.equal(sampleBurstGeometry(interrupted, next, 0), interrupted);
-  const early = sampleBurstGeometry(interrupted, next, .0001);
+  const early = sampleBurstGeometry(interrupted, next, .000001);
   for (let index = 0; index < early.length; index += BURST_VERTEX_STRIDE) {
     assert.ok(Math.abs(early[index] - interrupted[index]) < .01);
     assert.ok(Math.abs(early[index + 1] - interrupted[index + 1]) < .01);
