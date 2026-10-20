@@ -1,181 +1,168 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef } from "react";
+import { createBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
+import { createBurstRenderer } from "./burst-renderer.js";
 
-function randomSource(seed) {
-  return () => {
-    seed |= 0;
-    seed = seed + 0x6D2B79F5 | 0;
-    let value = Math.imul(seed ^ seed >>> 15, 1 | seed);
-    value = value + Math.imul(value ^ value >>> 7, 61 | value) ^ value;
-    return ((value ^ value >>> 14) >>> 0) / 4294967296;
+const TWEEN_MS = 650;
+const ease = (t) => t * t * (3 - 2 * t);
+const mixPoint = (from, to, t) => ({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+
+function restingEye(canvas, letter, context) {
+  const bounds = canvas.getBoundingClientRect();
+  if (!letter || !context) return { origin: { x: bounds.width / 2, y: bounds.height / 2 }, radius: { x: 20, y: 20 } };
+  const glyph = letter.getBoundingClientRect();
+  const styles = getComputedStyle(letter);
+  context.font = `${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+  const metrics = context.measureText("o");
+  const ascent = metrics.fontBoundingBoxAscent ?? parseFloat(styles.fontSize) * .8;
+  const descent = metrics.fontBoundingBoxDescent ?? parseFloat(styles.fontSize) * .2;
+  const baseline = glyph.top - bounds.top + (glyph.height - ascent - descent) / 2 + ascent;
+  return {
+    origin: {
+      x: glyph.left - bounds.left + (metrics.actualBoundingBoxRight - metrics.actualBoundingBoxLeft) / 2,
+      y: baseline + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2,
+    },
+    radius: {
+      x: (metrics.actualBoundingBoxRight + metrics.actualBoundingBoxLeft) * .31,
+      y: (metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) * .31,
+    },
   };
 }
 
-function polygon(context, points, fill, stroke, lineWidth = .7) {
-  context.beginPath();
-  points.forEach(([x, y], index) => index ? context.lineTo(x, y) : context.moveTo(x, y));
-  context.closePath();
-  if (fill) { context.fillStyle = fill; context.fill(); }
-  if (stroke) { context.strokeStyle = stroke; context.lineWidth = lineWidth; context.stroke(); }
-}
-
-function line(context, points, color, width = .6) {
-  context.beginPath();
-  points.forEach(([x, y], index) => index ? context.lineTo(x, y) : context.moveTo(x, y));
-  context.strokeStyle = color;
-  context.lineWidth = width;
-  context.stroke();
-}
-
-function paintBurst(context, width, height, colors, seed, origin) {
-  const { accent, ink, edge, paper } = colors;
-  const random = randomSource(seed);
-  const cx = origin.x;
-  const cy = origin.y;
-  const radius = Math.min(height * .48, width * .3);
-  const stretch = Math.min(1.8, width / height);
-  const point = (angle, distance, perpendicular = 0) => [
-    cx + Math.cos(angle) * distance * stretch - Math.sin(angle) * perpendicular,
-    cy + Math.sin(angle) * distance + Math.cos(angle) * perpendicular,
-  ];
-
-  // Long, broken structural ribs. Every rib has its own construction and length.
-  for (let index = 0; index < 21; index++) {
-    const angle = index / 21 * Math.PI * 2 + (random() - .5) * .22;
-    const length = radius * (.48 + random() * .54);
-    const thickness = 2 + random() * 15;
-    const spine = [.13, .34, .57, .74, 1].map((fraction) => point(angle, length * fraction, (random() - .5) * 26));
-    const outline = spine.map(([x, y], step) => [x, y - thickness * (1 - step / 5)])
-      .concat(spine.slice().reverse());
-    polygon(context, outline, index % 4 ? accent + "12" : ink + "28", edge + "65", .55);
-    line(context, spine, ink + "55", .5);
-    if (index % 3 === 0) {
-      const end = point(angle, length * 1.08);
-      line(context, [spine.at(-1), end, [end[0] + 15, end[1]]], edge + "70");
-      polygon(context, [[end[0] + 18, end[1] - 1], [end[0] + 20, end[1] - 1], [end[0] + 20, end[1] + 1], [end[0] + 18, end[1] + 1]], ink + "90");
-    }
-  }
-
-  // Faceted plates cluster at the source, then break into thin, scattered pieces.
-  const fragments = width < 760 ? 130 : 240;
-  for (let index = 0; index < fragments; index++) {
-    const angle = random() * Math.PI * 2;
-    const distance = radius * (.17 + Math.pow(random(), 1.65) * .85);
-    const size = (1 - distance / (radius * 1.2)) * (7 + random() * 35);
-    const length = size * (1.3 + random() * 2.6);
-    const breadth = size * (.16 + random() * .55);
-    const a = point(angle, distance - length * .5, -breadth * .2);
-    const b = point(angle + .025, distance + length * .5, -breadth * .55);
-    const c = point(angle + .04, distance + length * .28, breadth * .65);
-    const d = point(angle - .025, distance - length * .3, breadth * .8);
-    const mid = [(a[0] + c[0]) * .5 + size * .15, (a[1] + c[1]) * .5 - size * .25];
-    const solid = index % 9 === 0;
-    polygon(context, [a, b, mid], solid ? accent + "b0" : accent + "20", edge + "65");
-    polygon(context, [b, c, mid], solid ? ink + "a0" : ink + "16", ink + "70", .45);
-    polygon(context, [c, d, a, mid], solid ? accent + "70" : paper + "8c", edge + "80", .5);
-    if (index % 4 === 0 && size > 13) {
-      for (let stripe = 1; stripe < 5; stripe++) {
-        const fraction = stripe / 6;
-        line(context, [
-          [a[0] + (b[0] - a[0]) * fraction, a[1] + (b[1] - a[1]) * fraction],
-          [d[0] + (c[0] - d[0]) * fraction, d[1] + (c[1] - d[1]) * fraction],
-        ], ink + "70", .45);
-      }
-    }
-  }
-
-  // Fine registration details use the same geometry as the larger plates.
-  for (let index = 0; index < 54; index++) {
-    const angle = random() * Math.PI * 2;
-    const distance = radius * (.46 + random() * .62);
-    const [x, y] = point(angle, distance);
-    const size = 1.5 + random() * 3;
-    if (index % 5) {
-      polygon(context, [[x, y], [x + size * 2, y - size], [x + size, y + size]], accent + "70");
-    } else {
-      line(context, [[x - 4, y], [x + 4, y]], ink + "80");
-      line(context, [[x, y - 4], [x, y + 4]], ink + "80");
-    }
-  }
-}
-
-function paintFrame(canvas, dimensions, selection) {
-  const context = canvas.getContext("2d", { alpha: false });
-  if (!context) return;
-  const { width, height, colors } = dimensions;
-  const seed = selection ? Math.imul(selection.seed ^ 0xA3C59AC3, 2654435761) >>> 0 : 43107;
-  const origin = selection ? { x: selection.x / 100 * width, y: selection.y / 100 * height } : { x: width / 2, y: height / 2 };
-  const started = performance.now();
-  context.setTransform(canvas.width / width, 0, 0, canvas.height / height, 0, 0);
-  context.fillStyle = colors.paper;
-  context.fillRect(0, 0, width, height);
-  paintBurst(context, width, height, colors, seed, origin);
-  if (import.meta.env.DEV) {
-    canvas.dataset.drawMs = (performance.now() - started).toFixed(2);
-    canvas.dataset.drawCount = Number(canvas.dataset.drawCount || 0) + 1;
-    canvas.dataset.seed = seed;
-    canvas.dataset.origin = `${origin.x.toFixed(1)},${origin.y.toFixed(1)}`;
-  }
-}
-
-export default function BurstCanvas({ positions, active }) {
-  const surfaces = useRef([]);
-  const dimensions = useRef(null);
-  const currentSurface = useRef(0);
+export default function BurstCanvas({ positions, active, originLetter }) {
+  const surface = useRef(null);
+  const controller = useRef(null);
   const selection = useRef(null);
-  const [visible, setVisible] = useState(0);
   selection.current = active == null ? null : positions[active];
 
   useEffect(() => {
-    const canvas = surfaces.current[0];
-    let frame = 0;
-    let previousSize = "";
-    const resize = () => {
+    const canvas = surface.current;
+    const measurement = document.createElement("canvas").getContext("2d");
+    let renderer = createBurstRenderer(canvas);
+    if (!renderer) return;
+    let dimensions, from, to, fromEye, toEye, started = 0, frame = 0, resizeFrame = 0, previousSize = "", animationFrames = 0, lastPaint = 0, unavailable = false;
+    const cache = new Map();
+    const progressAt = (time) => frame ? Math.min(1, Math.max(0, (time - started) / TWEEN_MS)) : 1;
+    const draw = (progress) => {
+      renderer.draw(progress, mixPoint(fromEye, toEye, ease(progress)), dimensions.eye.radius);
+      if (import.meta.env.DEV) {
+        canvas.dataset.drawCount = Number(canvas.dataset.drawCount || 0) + 1;
+        canvas.dataset.progress = progress.toFixed(3);
+      }
+    };
+    const animate = (time) => {
+      const progress = progressAt(time);
+      // A 120/144 Hz display should not double the work for this brief background effect.
+      if (time - lastPaint >= 1000 / 60 - .5 || progress >= 1) {
+        draw(progress);
+        animationFrames++;
+        lastPaint = time;
+      }
+      if (import.meta.env.DEV && progress >= 1) {
+        canvas.dataset.animationFrames = animationFrames;
+        canvas.dataset.animationMs = (time - started).toFixed(1);
+      }
+      frame = progress < 1 ? requestAnimationFrame(animate) : 0;
+    };
+    const transition = (selected, immediate = false) => {
+      if (!dimensions || unavailable) return;
+      const now = performance.now();
+      const previousProgress = progressAt(now);
+      const source = to && { vertices: sampleBurstGeometry(from.vertices, to.vertices, previousProgress) };
+      const sourceEye = toEye && mixPoint(fromEye, toEye, ease(previousProgress));
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
+      frame = 0;
+      const { width, height, colors, eye } = dimensions;
+      const origin = selected ? { x: selected.x / 100 * width, y: selected.y / 100 * height } : eye.origin;
+      const seed = selected ? Math.imul(selected.seed ^ 0xA3C59AC3, 2654435761) >>> 0 : 43107;
+      const key = `${seed}:${origin.x}:${origin.y}`;
+      const cached = cache.has(key);
+      const paintStarted = performance.now();
+      if (!cached) {
+        if (cache.size >= 9) cache.delete(cache.keys().next().value);
+        cache.set(key, createBurstGeometry(width, height, colors, seed, origin));
+      }
+      to = cache.get(key);
+      from = source || to;
+      fromEye = sourceEye || origin;
+      toEye = origin;
+      renderer.setGeometry(from, to);
+      if (import.meta.env.DEV) {
+        canvas.dataset.renderer = renderer.animated ? "webgl" : "2d";
+        canvas.dataset.geometryBuilds = Number(canvas.dataset.geometryBuilds || 0) + Number(!cached);
+        canvas.dataset.drawMs = (performance.now() - paintStarted).toFixed(2);
+        canvas.dataset.pathCacheHit = String(cached);
+        canvas.dataset.seed = seed;
+        canvas.dataset.origin = `${origin.x.toFixed(1)},${origin.y.toFixed(1)}`;
+      }
+      if (immediate || !renderer.animated || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        from = to;
+        fromEye = toEye;
+        draw(1);
+        return;
+      }
+      // One GPU batch per frame; the shader handles every piece's curve and rotation.
+      // Geometry is generated/uploaded once per selection. No frames run while idle.
+      started = now;
+      animationFrames = 0;
+      lastPaint = now;
+      draw(0);
+      frame = requestAnimationFrame(animate);
+    };
+    const resize = () => {
+      cancelAnimationFrame(resizeFrame);
+      resizeFrame = requestAnimationFrame(() => {
         const { width, height } = canvas.getBoundingClientRect();
-        if (!width || !height) return;
-        const size = `${width}:${height}`;
+        if (!width || !height || unavailable) return;
+        const eye = restingEye(canvas, originLetter.current, measurement);
+        const dpr = window.devicePixelRatio || 1;
+        const size = `${width}:${height}:${dpr}:${eye.origin.x}:${eye.origin.y}`;
         if (size === previousSize) return;
         previousSize = size;
-        const ratio = Math.min(window.devicePixelRatio || 1, 1.5, Math.sqrt(1_400_000 / (width * height)));
-        for (const surface of surfaces.current) {
-          surface.width = Math.round(width * ratio);
-          surface.height = Math.round(height * ratio);
-        }
+        cancelAnimationFrame(frame);
+        frame = 0;
+        from = to = fromEye = toEye = null;
+        cache.clear();
         const styles = getComputedStyle(canvas);
-        dimensions.current = {
-          width, height,
-          colors: {
-            accent: styles.getPropertyValue("--accent").trim(),
-            ink: styles.getPropertyValue("--wedge-ink").trim(),
-            edge: styles.getPropertyValue("--wedge-line").trim(),
-            paper: styles.getPropertyValue("--wedge").trim(),
-          },
+        const colors = {
+          accent: styles.getPropertyValue("--accent").trim(),
+          ink: styles.getPropertyValue("--wedge-ink").trim(),
+          edge: styles.getPropertyValue("--wedge-line").trim(),
+          paper: styles.getPropertyValue("--wedge").trim(),
         };
-        const selected = window.matchMedia("(max-width: 960px)").matches ? null : selection.current;
-        paintFrame(surfaces.current[currentSurface.current], dimensions.current, selected);
+        dimensions = { width, height, colors, eye };
+        const ratio = Math.min(dpr, 2, Math.sqrt(4_000_000 / (width * height)));
+        renderer.resize(width, height, ratio, colors.paper);
+        transition(window.matchMedia("(max-width: 960px)").matches ? null : selection.current, true);
       });
     };
+    const lost = (event) => { event.preventDefault(); unavailable = true; cancelAnimationFrame(frame); frame = 0; };
+    const restored = () => { renderer.dispose(); renderer = createBurstRenderer(canvas); unavailable = false; previousSize = ""; resize(); };
     const observer = new ResizeObserver(resize);
     observer.observe(canvas);
+    if (originLetter.current) {
+      observer.observe(originLetter.current);
+      observer.observe(originLetter.current.parentElement);
+    }
+    canvas.addEventListener("webglcontextlost", lost);
+    canvas.addEventListener("webglcontextrestored", restored);
+    window.addEventListener("resize", resize);
+    controller.current = (selected) => {
+      if (!window.matchMedia("(max-width: 960px)").matches) transition(selected);
+    };
     resize();
-    return () => { observer.disconnect(); cancelAnimationFrame(frame); };
-  }, []);
+    return () => {
+      controller.current = null;
+      observer.disconnect();
+      canvas.removeEventListener("webglcontextlost", lost);
+      canvas.removeEventListener("webglcontextrestored", restored);
+      window.removeEventListener("resize", resize);
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(resizeFrame);
+      renderer.dispose();
+    };
+  }, [originLetter]);
 
-  useEffect(() => {
-    if (!dimensions.current || window.matchMedia("(max-width: 960px)").matches) return;
-    const next = 1 - currentSurface.current;
-    paintFrame(surfaces.current[next], dimensions.current, selection.current);
-    currentSurface.current = next;
-    setVisible(next);
-  }, [active, positions]);
+  useEffect(() => { controller.current?.(selection.current); }, [active, positions]);
 
-  return <>
-    {[0, 1].map((index) => <canvas
-      className={`burst-art${visible === index ? " is-visible" : ""}`}
-      key={index}
-      ref={(canvas) => { surfaces.current[index] = canvas; }}
-      aria-hidden="true"
-    />)}
-  </>;
+  return <canvas className="burst-art" ref={surface} aria-hidden="true" />;
 }

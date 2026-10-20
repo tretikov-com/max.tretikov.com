@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import Giscus from "@giscus/react";
 import "katex/dist/katex.min.css";
 import snapshot from "./posts.json";
-import { blogPostNumber, DISCUSSIONS_URL } from "./config.js";
+import { blogPostNumber } from "./config.js";
 import BurstIndex from "./BurstIndex.jsx";
 import { formatBlogDate } from "./date.js";
 import "./blog.css";
@@ -94,6 +94,5 @@ export default function BlogApp({ route }) {
     {isIndex ? <BurstIndex posts={posts} /> : post ? <BlogPost post={post} /> : <main className="blog-not-found" id="blog-main">
       <h1>Post not found.</h1><p>This post may have moved or is no longer published.</p><a href="/blog">← ALL POSTS</a>
     </main>}
-    <footer className="blog-footer"><span>© {new Date().getFullYear()} MAX TRETIKOV</span><a href={DISCUSSIONS_URL} target="_blank" rel="noopener noreferrer">GITHUB DISCUSSIONS ↗</a></footer>
   </div>;
 }
