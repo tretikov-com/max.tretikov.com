@@ -1,4 +1,4 @@
-import { burstFragmentPose } from "./burst-motion.js";
+import { burstProgress } from "./burst-motion.js";
 
 function randomSource(seed) {
   return () => {
@@ -107,6 +107,7 @@ export function createBurstGeometry(width, height, colors, seed, origin) {
   const shapes = createBurstShapes(width, height, colors, seed, origin);
   const count = shapes.reduce((sum, shape) => sum + (shape.fill ? (shape.points.length - 2) * 3 : 0) + (shape.stroke ? (shape.points.length - (shape.closed ? 0 : 1)) * 6 : 0), 0);
   const vertices = new Float32Array(count * BURST_VERTEX_STRIDE);
+  const pieces = [];
   const motions = new Map();
   let offset = 0;
   let motion;
@@ -119,6 +120,12 @@ export function createBurstGeometry(width, height, colors, seed, origin) {
     offset += BURST_VERTEX_STRIDE;
   };
   for (const shape of shapes) {
+    const piece = pieces[shape.id] ||= { id: shape.id, start: offset, center: shape.center, minX: Infinity, minY: Infinity, maxX: -Infinity, maxY: -Infinity, radius: 0 };
+    for (const [x, y] of shape.points) {
+      piece.minX = Math.min(piece.minX, x); piece.minY = Math.min(piece.minY, y);
+      piece.maxX = Math.max(piece.maxX, x); piece.maxY = Math.max(piece.maxY, y);
+      piece.radius = Math.max(piece.radius, Math.hypot(x - piece.center[0], y - piece.center[1]));
+    }
     if (!motions.has(shape.id)) {
       const random = randomSource(seed ^ Math.imul(shape.id + 1, 2654435761));
       motions.set(shape.id, [random() * .18, (random() - .5) * 2.8, (random() - .5) * 120]);
@@ -143,30 +150,61 @@ export function createBurstGeometry(width, height, colors, seed, origin) {
         for (const corner of [0, 1, 2, 0, 2, 3]) vertex(corners[corner], color, shape);
       }
     }
+    piece.end = offset;
   }
-  return { vertices, shapes };
+  return { vertices, shapes, pieces };
 }
 
-// This mirrors the vertex shader only when a hover interrupts an unfinished tween.
-// Sampling once lets the next transition start from each fragment's current pose.
-export function sampleBurstGeometry(from, to, progress, transition) {
+export function createLocalBurstGeometry(base, target, seed) {
+  const random = randomSource(seed);
+  const candidates = base.pieces.filter((piece) => {
+    if (piece.id < 21 || piece.radius > 65 || Math.max(piece.maxX - piece.minX, piece.maxY - piece.minY) > 96) return false;
+    const dx = piece.center[0] - target.x;
+    const dy = piece.center[1] - target.y;
+    // Move fragments around the label, where the adjustment will be visible.
+    return Math.hypot(dx, dy) < 280 && !(Math.abs(dx) < 155 && Math.abs(dy) < 85);
+  }).map((piece) => ({ piece, score: Math.hypot(piece.center[0] - target.x, piece.center[1] - target.y) * (.85 + random() * .3) }));
+  candidates.sort((a, b) => a.score - b.score);
+  const adjustments = new Map();
+  const vertices = new Float32Array(base.vertices);
+  for (const { piece } of candidates.slice(0, 14)) {
+    const dx = piece.center[0] - target.x;
+    const dy = piece.center[1] - target.y;
+    const distance = Math.hypot(dx, dy) || 1;
+    const shift = 4 + random() * 2;
+    const tangent = (random() - .5) * 2;
+    const angle = (random() - .5) * Math.PI / 36;
+    const moveX = dx / distance * shift - dy / distance * tangent;
+    const moveY = dy / distance * shift + dx / distance * tangent;
+    const cos = Math.cos(angle), sin = Math.sin(angle);
+    const transform = ([x, y]) => {
+      const localX = x - piece.center[0], localY = y - piece.center[1];
+      return [piece.center[0] + moveX + cos * localX - sin * localY, piece.center[1] + moveY + sin * localX + cos * localY];
+    };
+    adjustments.set(piece.id, { transform, center: [piece.center[0] + moveX, piece.center[1] + moveY] });
+    for (let index = piece.start; index < piece.end; index += BURST_VERTEX_STRIDE) {
+      const [x, y] = transform([base.vertices[index], base.vertices[index + 1]]);
+      vertices[index] = x; vertices[index + 1] = y;
+      vertices[index + 2] += moveX; vertices[index + 3] += moveY;
+    }
+  }
+  const shapes = base.shapes.map((shape) => {
+    const adjustment = adjustments.get(shape.id);
+    return adjustment ? { ...shape, center: adjustment.center, points: shape.points.map(adjustment.transform) } : shape;
+  });
+  return { vertices, shapes, pieces: base.pieces, movedIds: [...adjustments.keys()] };
+}
+
+// Capture only interrupted transitions. Ordinary frames interpolate on the GPU.
+export function sampleBurstGeometry(from, to, progress) {
   if (progress >= 1) return to;
   if (progress <= 0) return from;
   const result = new Float32Array(to);
-  const poses = [];
+  const progressByPiece = [];
   for (let index = 0; index < to.length; index += BURST_VERTEX_STRIDE) {
     const id = to[index + 11];
-    if (!poses[id]) {
-      poses[id] = burstFragmentPose(from[index + 2], from[index + 3], to[index + 2], to[index + 3], to[index + 8], to[index + 9], to[index + 10], progress, transition);
-    }
-    const pose = poses[id];
-    const x = from[index] - from[index + 2] + (to[index] - to[index + 2] - from[index] + from[index + 2]) * pose.eased;
-    const y = from[index + 1] - from[index + 3] + (to[index + 1] - to[index + 3] - from[index + 1] + from[index + 3]) * pose.eased;
-    result[index] = pose.x + (pose.cos * x - pose.sin * y) * pose.scale;
-    result[index + 1] = pose.y + (pose.sin * x + pose.cos * y) * pose.scale;
-    result[index + 2] = pose.x;
-    result[index + 3] = pose.y;
-    for (let channel = 4; channel < 8; channel++) result[index + channel] = from[index + channel] + (to[index + channel] - from[index + channel]) * pose.colorMix;
+    const eased = progressByPiece[id] ??= burstProgress(progress, to[index + 8]);
+    for (let channel = 0; channel < 8; channel++) result[index + channel] = from[index + channel] + (to[index + channel] - from[index + channel]) * eased;
   }
   return result;
 }

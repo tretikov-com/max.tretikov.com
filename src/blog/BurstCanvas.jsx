@@ -1,10 +1,7 @@
 import React, { useEffect, useRef } from "react";
-import { createBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
+import { createBurstGeometry, createLocalBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
 import { createBurstRenderer } from "./burst-renderer.js";
-import { createBurstTransition } from "./burst-motion.js";
-
-const ease = (t) => t * t * (3 - 2 * t);
-const mixPoint = (from, to, t) => ({ x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t });
+import { BURST_TWEEN_MS } from "./burst-motion.js";
 
 function restingEye(canvas, letter, context) {
   const bounds = canvas.getBoundingClientRect();
@@ -39,12 +36,11 @@ export default function BurstCanvas({ positions, active, originLetter }) {
     const measurement = document.createElement("canvas").getContext("2d");
     let renderer = createBurstRenderer(canvas);
     if (!renderer) return;
-    let dimensions, from, to, fromEye, toEye, choreography, sequence = 0, previousSeed = 43107, started = 0, frame = 0, resizeFrame = 0, previousSize = "", animationFrames = 0, lastPaint = 0, unavailable = false;
+    let dimensions, base, from, to, started = 0, frame = 0, resizeFrame = 0, previousSize = "", animationFrames = 0, lastPaint = 0, unavailable = false;
     const cache = new Map();
-    const recentModes = [];
-    const progressAt = (time) => frame ? Math.min(1, Math.max(0, (time - started) / choreography.duration)) : 1;
+    const progressAt = (time) => frame ? Math.min(1, Math.max(0, (time - started) / BURST_TWEEN_MS)) : 1;
     const draw = (progress) => {
-      renderer.draw(progress, mixPoint(fromEye, toEye, ease(progress)), dimensions.eye.radius);
+      renderer.draw(progress, dimensions.eye.origin, dimensions.eye.radius);
       if (import.meta.env.DEV) {
         canvas.dataset.drawCount = Number(canvas.dataset.drawCount || 0) + 1;
         canvas.dataset.progress = progress.toFixed(3);
@@ -68,47 +64,38 @@ export default function BurstCanvas({ positions, active, originLetter }) {
       if (!dimensions || unavailable) return;
       const now = performance.now();
       const previousProgress = progressAt(now);
-      const source = to && { vertices: sampleBurstGeometry(from.vertices, to.vertices, previousProgress, choreography) };
-      const sourceEye = toEye && mixPoint(fromEye, toEye, ease(previousProgress));
+      const source = to && { vertices: sampleBurstGeometry(from.vertices, to.vertices, previousProgress) };
       cancelAnimationFrame(frame);
       frame = 0;
-      const { width, height, colors, eye } = dimensions;
-      const origin = selected ? { x: selected.x / 100 * width, y: selected.y / 100 * height } : eye.origin;
-      const seed = selected ? Math.imul(selected.seed ^ 0xA3C59AC3, 2654435761) >>> 0 : 43107;
-      const key = `${seed}:${origin.x}:${origin.y}`;
+      const { width, height, eye } = dimensions;
+      const target = selected && { x: selected.x / 100 * width, y: selected.y / 100 * height };
+      const key = selected ? `${selected.seed}:${target.x}:${target.y}` : "rest";
       const cached = cache.has(key);
       const paintStarted = performance.now();
       if (!cached) {
-        if (cache.size >= 9) cache.delete(cache.keys().next().value);
-        cache.set(key, createBurstGeometry(width, height, colors, seed, origin));
+        if (cache.size >= 9) cache.delete([...cache.keys()].find((entry) => entry !== "rest"));
+        cache.set(key, createLocalBurstGeometry(base, target, selected.seed));
       }
       to = cache.get(key);
       from = source || to;
-      fromEye = sourceEye || origin;
-      toEye = origin;
-      choreography = createBurstTransition(seed ^ previousSeed ^ Math.imul(++sequence, 2654435761), recentModes, origin);
-      recentModes.push(choreography.mode);
-      if (recentModes.length > 2) recentModes.shift();
-      previousSeed = seed;
-      renderer.setGeometry(from, to, choreography);
+      renderer.setGeometry(from, to);
       if (import.meta.env.DEV) {
         canvas.dataset.renderer = renderer.animated ? "webgl" : "2d";
         canvas.dataset.geometryBuilds = Number(canvas.dataset.geometryBuilds || 0) + Number(!cached);
         canvas.dataset.drawMs = (performance.now() - paintStarted).toFixed(2);
         canvas.dataset.pathCacheHit = String(cached);
-        canvas.dataset.seed = seed;
-        canvas.dataset.origin = `${origin.x.toFixed(1)},${origin.y.toFixed(1)}`;
-        canvas.dataset.choreography = ["hook", "recoil", "fold", "sweep"][choreography.mode];
-        canvas.dataset.duration = choreography.duration;
+        canvas.dataset.seed = 43107;
+        canvas.dataset.origin = `${eye.origin.x.toFixed(1)},${eye.origin.y.toFixed(1)}`;
+        canvas.dataset.movedPieces = to.movedIds?.length || 0;
+        canvas.dataset.duration = BURST_TWEEN_MS;
       }
       if (immediate || !renderer.animated || window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
         from = to;
-        fromEye = toEye;
         draw(1);
         return;
       }
-      // One GPU batch per frame; the shader handles every piece's curve and rotation.
-      // Geometry is generated/uploaded once per selection. No frames run while idle.
+      // One short settle for a few nearby fragments. The composition and eye stay fixed.
+      // The GPU interpolates cached targets; no frames run while idle.
       started = now;
       animationFrames = 0;
       lastPaint = now;
@@ -127,7 +114,7 @@ export default function BurstCanvas({ positions, active, originLetter }) {
         previousSize = size;
         cancelAnimationFrame(frame);
         frame = 0;
-        from = to = fromEye = toEye = null;
+        from = to = null;
         cache.clear();
         const styles = getComputedStyle(canvas);
         const colors = {
@@ -136,7 +123,9 @@ export default function BurstCanvas({ positions, active, originLetter }) {
           edge: styles.getPropertyValue("--wedge-line").trim(),
           paper: styles.getPropertyValue("--wedge").trim(),
         };
-        dimensions = { width, height, colors, eye };
+        dimensions = { width, height, eye };
+        base = createBurstGeometry(width, height, colors, 43107, eye.origin);
+        cache.set("rest", base);
         const ratio = Math.min(dpr, 2, Math.sqrt(4_000_000 / (width * height)));
         renderer.resize(width, height, ratio, colors.paper);
         transition(window.matchMedia("(max-width: 960px)").matches ? null : selection.current, true);

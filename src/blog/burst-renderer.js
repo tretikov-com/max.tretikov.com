@@ -1,5 +1,4 @@
 import { BURST_VERTEX_STRIDE } from "./burst-geometry.js";
-import { DEFAULT_BURST_TRANSITION } from "./burst-motion.js";
 
 const vertexSource = `
 precision highp float;
@@ -10,44 +9,14 @@ attribute vec4 a_toColor;
 attribute vec3 a_motion;
 uniform vec2 u_resolution;
 uniform float u_progress;
-uniform vec4 u_style;
-uniform vec4 u_variation;
 varying mediump vec4 v_color;
 varying mediump vec2 v_position;
 void main() {
-  float delay = a_motion.x;
-  if (u_style.x > 2.5) {
-    vec2 relative = a_to.zw - u_variation.zw;
-    float sweep = mod(atan(relative.y, relative.x) + u_variation.x + 6.28318531, 6.28318531) / 6.28318531;
-    delay = delay * 0.4 + sweep * 0.25;
-  }
-  delay = min(0.4, delay * u_style.w);
+  float delay = min(0.06, a_motion.x * 0.3);
   float t = clamp((u_progress - delay) / (1.0 - delay), 0.0, 1.0);
-  float eased = 1.0 - pow(1.0 - t, 3.0);
-  float wave = sin(3.14159265 * t);
-  float turnWave = wave;
-  float scale = 1.0;
-  if (u_style.x > 0.5 && u_style.x < 1.5) {
-    float back = t - 1.0;
-    eased = 1.0 + (u_variation.y + 1.0) * back * back * back + u_variation.y * back * back;
-    turnWave = sin(6.28318531 * t) * (1.0 - t);
-  } else if (u_style.x > 1.5 && u_style.x < 2.5) {
-    float back = -2.0 * t + 2.0;
-    eased = t < 0.5 ? 2.0 * t * t : 1.0 - back * back / 2.0;
-    scale = 1.0 - wave * 0.65;
-    turnWave *= 1.8;
-  } else if (u_style.x > 2.5) {
-    eased = 1.0 - pow(1.0 - t, 4.0);
-    wave *= 2.0 * t - 1.0;
-  }
-  float angle = turnWave * a_motion.y * u_style.y;
-  vec2 travel = a_to.zw - a_from.zw;
-  vec2 perpendicular = vec2(-travel.y, travel.x) / max(length(travel), 0.001);
-  vec2 center = mix(a_from.zw, a_to.zw, eased) + perpendicular * wave * a_motion.z * u_style.z;
-  vec2 local = mix(a_from.xy - a_from.zw, a_to.xy - a_to.zw, eased);
-  local = mat2(cos(angle), sin(angle), -sin(angle), cos(angle)) * local * scale;
-  v_position = center + local;
-  v_color = mix(a_fromColor, a_toColor, clamp(eased, 0.0, 1.0));
+  float eased = t * t * (3.0 - 2.0 * t);
+  v_position = mix(a_from.xy, a_to.xy, eased);
+  v_color = mix(a_fromColor, a_toColor, eased);
   vec2 clip = v_position / u_resolution * 2.0 - 1.0;
   gl_Position = vec4(clip.x, -clip.y, 0.0, 1.0);
 }`;
@@ -116,7 +85,7 @@ export function createBurstRenderer(canvas) {
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
   const buffers = [gl.createBuffer(), gl.createBuffer()];
   const attributes = Object.fromEntries(["from", "to", "fromColor", "toColor", "motion"].map((name) => [name, gl.getAttribLocation(program, `a_${name}`)]));
-  const uniforms = Object.fromEntries(["resolution", "progress", "eye", "eyeRadius", "style", "variation"].map((name) => [name, gl.getUniformLocation(program, `u_${name}`)]));
+  const uniforms = Object.fromEntries(["resolution", "progress", "eye", "eyeRadius"].map((name) => [name, gl.getUniformLocation(program, `u_${name}`)]));
   let count = 0;
   const attribute = (name, size, offset) => {
     gl.enableVertexAttribArray(attributes[name]);
@@ -130,9 +99,7 @@ export function createBurstRenderer(canvas) {
       gl.uniform2f(uniforms.resolution, width, height);
       gl.clearColor(...[1, 3, 5].map((offset) => parseInt(paper.slice(offset, offset + 2), 16) / 255), 1);
     },
-    setGeometry(from, to, transition = DEFAULT_BURST_TRANSITION) {
-      gl.uniform4f(uniforms.style, transition.mode, transition.turn, transition.bend, transition.stagger);
-      gl.uniform4f(uniforms.variation, transition.phase, transition.overshoot, transition.origin.x, transition.origin.y);
+    setGeometry(from, to) {
       gl.bindBuffer(gl.ARRAY_BUFFER, buffers[0]);
       gl.bufferData(gl.ARRAY_BUFFER, from.vertices, gl.DYNAMIC_DRAW);
       attribute("from", 4, 0); attribute("fromColor", 4, 4);

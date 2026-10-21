@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { BURST_VERTEX_STRIDE, createBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
+import { BURST_VERTEX_STRIDE, createBurstGeometry, createLocalBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
+
+import { BURST_SLOTS } from "./layout.js";
 
 const colors = { accent: "#8b5bd1", ink: "#50435e", edge: "#988ca5", paper: "#f7f7f5" };
 const geometry = (seed, width = 1200, origin = { x: 600, y: 400 }) => createBurstGeometry(width, 800, colors, seed, origin).vertices;
@@ -19,36 +21,47 @@ test("seeded burst meshes stay compatible across posts and small screens", () =>
   }
 });
 
-test("fragments follow distinct curved, rotating poses between exact endpoints", () => {
-  const from = geometry(43107);
-  const to = geometry(9001, 1200, { x: 948, y: 304 });
-  assert.equal(sampleBurstGeometry(from, to, 0), from);
-  assert.equal(sampleBurstGeometry(from, to, 1), to);
-  const middle = sampleBurstGeometry(from, to, .45);
-  assert.ok(middle.every(Number.isFinite));
-  const motions = new Set();
-  let curved = 0;
-  for (let index = 0; index < to.length; index += BURST_VERTEX_STRIDE) {
-    motions.add(`${to[index + 8]}:${to[index + 9]}:${to[index + 10]}`);
-    const dx = to[index + 2] - from[index + 2];
-    const dy = to[index + 3] - from[index + 3];
-    const cross = dx * (middle[index + 3] - from[index + 3]) - dy * (middle[index + 2] - from[index + 2]);
-    if (Math.abs(cross) > 1) curved++;
+test("hover changes only a small local cluster while structural shards and colors stay fixed", () => {
+  const base = createBurstGeometry(1200, 800, colors, 43107, { x: 600, y: 400 });
+  const neighborhoods = [];
+  for (const [slot, position] of BURST_SLOTS.entries()) {
+    const target = { x: position.x * 12, y: position.y * 8 };
+    const local = createLocalBurstGeometry(base, target, 9001 + slot);
+    assert.ok(local.movedIds.length > 0 && local.movedIds.length <= 14);
+    assert.ok(local.movedIds.every((id) => id >= 21));
+    assert.deepEqual(createLocalBurstGeometry(base, target, 9001 + slot).vertices, local.vertices);
+    let changed = 0;
+    for (let index = 0; index < base.vertices.length; index += BURST_VERTEX_STRIDE) {
+      const distance = Math.hypot(local.vertices[index] - base.vertices[index], local.vertices[index + 1] - base.vertices[index + 1]);
+      assert.ok(distance <= 10);
+      if (distance > 0) {
+        changed++;
+        const id = local.vertices[index + 11];
+        assert.ok(local.movedIds.includes(id));
+        const piece = base.pieces[id];
+        assert.ok(Math.hypot(piece.center[0] - target.x, piece.center[1] - target.y) < 280);
+      }
+      for (let channel = 4; channel < BURST_VERTEX_STRIDE; channel++) assert.equal(local.vertices[index + channel], base.vertices[index + channel]);
+    }
+    assert.ok(changed / (base.vertices.length / BURST_VERTEX_STRIDE) < .1);
+    neighborhoods.push(local.movedIds.slice().sort((a, b) => a - b).join(","));
   }
-  assert.ok(motions.size > 300);
-  assert.ok(curved > to.length / BURST_VERTEX_STRIDE / 2);
+  assert.equal(new Set(neighborhoods).size, BURST_SLOTS.length);
 });
 
-test("interrupted reconstruction starts from the sampled pose without a position jump", () => {
-  const from = geometry(43107);
-  const to = geometry(9001, 1200, { x: 948, y: 304 });
-  const interrupted = sampleBurstGeometry(from, to, .31);
-  const next = geometry(9002, 1200, { x: 252, y: 496 });
+test("rapid local hover changes stay near the original drawing and begin without a jump", () => {
+  const base = createBurstGeometry(1200, 800, colors, 43107, { x: 600, y: 400 });
+  const first = createLocalBurstGeometry(base, { x: 948, y: 304 }, 9001).vertices;
+  const next = createLocalBurstGeometry(base, { x: 252, y: 496 }, 9002).vertices;
+  const interrupted = sampleBurstGeometry(base.vertices, first, .37);
   assert.equal(sampleBurstGeometry(interrupted, next, 0), interrupted);
-  const early = sampleBurstGeometry(interrupted, next, .000001);
-  for (let index = 0; index < early.length; index += BURST_VERTEX_STRIDE) {
-    assert.ok(Math.abs(early[index] - interrupted[index]) < .01);
-    assert.ok(Math.abs(early[index + 1] - interrupted[index + 1]) < .01);
-  }
   assert.equal(sampleBurstGeometry(interrupted, next, 1), next);
+  const early = sampleBurstGeometry(interrupted, next, .000001);
+  const middle = sampleBurstGeometry(interrupted, next, .5);
+  assert.ok(middle.every(Number.isFinite));
+  for (let index = 0; index < early.length; index += BURST_VERTEX_STRIDE) {
+    assert.ok(Math.abs(early[index] - interrupted[index]) < .001);
+    assert.ok(Math.abs(early[index + 1] - interrupted[index + 1]) < .001);
+    assert.ok(Math.hypot(middle[index] - base.vertices[index], middle[index + 1] - base.vertices[index + 1]) <= 10);
+  }
 });
