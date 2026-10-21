@@ -64,7 +64,8 @@ function fallbackRenderer(canvas) {
 }
 
 export function createBurstRenderer(canvas) {
-  const gl = canvas.getContext("webgl", { alpha: false, antialias: true, powerPreference: "low-power", depth: false, stencil: false });
+  // Retain settled frames when browsers repaint the otherwise idle canvas.
+  const gl = canvas.getContext("webgl", { alpha: false, antialias: true, powerPreference: "low-power", depth: false, stencil: false, preserveDrawingBuffer: true });
   if (!gl) return fallbackRenderer(canvas);
   const shaders = [];
   const compile = (type, source) => {

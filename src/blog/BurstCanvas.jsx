@@ -2,30 +2,20 @@ import React, { useEffect, useRef } from "react";
 import { createBurstGeometry, createLocalBurstGeometry, sampleBurstGeometry } from "./burst-geometry.js";
 import { createBurstRenderer } from "./burst-renderer.js";
 import { BURST_TWEEN_MS } from "./burst-motion.js";
+import { burstEyeFromGlyph, watchBurstEnvironment } from "./burst-alignment.js";
 
-function restingEye(canvas, letter, context) {
-  const bounds = canvas.getBoundingClientRect();
-  if (!letter || !context) return { origin: { x: bounds.width / 2, y: bounds.height / 2 }, radius: { x: 20, y: 20 } };
-  const glyph = letter.getBoundingClientRect();
+function restingEye(canvas, letter, baseline, context, width, height) {
+  if (!letter || !baseline || !context) return null;
   const styles = getComputedStyle(letter);
-  context.font = `${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+  context.font = `${styles.fontStyle} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+  context.textAlign = "left";
+  context.textBaseline = "alphabetic";
+  context.direction = "ltr";
   const metrics = context.measureText("o");
-  const ascent = metrics.fontBoundingBoxAscent ?? parseFloat(styles.fontSize) * .8;
-  const descent = metrics.fontBoundingBoxDescent ?? parseFloat(styles.fontSize) * .2;
-  const baseline = glyph.top - bounds.top + (glyph.height - ascent - descent) / 2 + ascent;
-  return {
-    origin: {
-      x: glyph.left - bounds.left + (metrics.actualBoundingBoxRight - metrics.actualBoundingBoxLeft) / 2,
-      y: baseline + (metrics.actualBoundingBoxDescent - metrics.actualBoundingBoxAscent) / 2,
-    },
-    radius: {
-      x: (metrics.actualBoundingBoxRight + metrics.actualBoundingBoxLeft) * .31,
-      y: (metrics.actualBoundingBoxAscent + metrics.actualBoundingBoxDescent) * .31,
-    },
-  };
+  return burstEyeFromGlyph({ canvasRect: canvas.getBoundingClientRect(), width, height, baselineRect: baseline.getBoundingClientRect(), metrics });
 }
 
-export default function BurstCanvas({ positions, active, originLetter }) {
+export default function BurstCanvas({ positions, active, originLetter, originBaseline }) {
   const surface = useRef(null);
   const controller = useRef(null);
   const selection = useRef(null);
@@ -105,18 +95,19 @@ export default function BurstCanvas({ positions, active, originLetter }) {
     const resize = () => {
       cancelAnimationFrame(resizeFrame);
       resizeFrame = requestAnimationFrame(() => {
-        const { width, height } = canvas.getBoundingClientRect();
+        const styles = getComputedStyle(canvas);
+        const width = parseFloat(styles.width), height = parseFloat(styles.height);
         if (!width || !height || unavailable) return;
-        const eye = restingEye(canvas, originLetter.current, measurement);
+        const eye = restingEye(canvas, originLetter.current, originBaseline.current, measurement, width, height);
+        if (!eye) return;
         const dpr = window.devicePixelRatio || 1;
-        const size = `${width}:${height}:${dpr}:${eye.origin.x}:${eye.origin.y}`;
+        const size = `${width}:${height}:${dpr}:${eye.origin.x}:${eye.origin.y}:${eye.radius.x}:${eye.radius.y}`;
         if (size === previousSize) return;
         previousSize = size;
         cancelAnimationFrame(frame);
         frame = 0;
         from = to = null;
         cache.clear();
-        const styles = getComputedStyle(canvas);
         const colors = {
           accent: styles.getPropertyValue("--accent").trim(),
           ink: styles.getPropertyValue("--wedge-ink").trim(),
@@ -141,7 +132,7 @@ export default function BurstCanvas({ positions, active, originLetter }) {
     }
     canvas.addEventListener("webglcontextlost", lost);
     canvas.addEventListener("webglcontextrestored", restored);
-    window.addEventListener("resize", resize);
+    const stopWatching = watchBurstEnvironment(window, document.fonts, resize);
     controller.current = (selected) => {
       if (!window.matchMedia("(max-width: 960px)").matches) transition(selected);
     };
@@ -151,12 +142,12 @@ export default function BurstCanvas({ positions, active, originLetter }) {
       observer.disconnect();
       canvas.removeEventListener("webglcontextlost", lost);
       canvas.removeEventListener("webglcontextrestored", restored);
-      window.removeEventListener("resize", resize);
+      stopWatching();
       cancelAnimationFrame(frame);
       cancelAnimationFrame(resizeFrame);
       renderer.dispose();
     };
-  }, [originLetter]);
+  }, [originLetter, originBaseline]);
 
   useEffect(() => { controller.current?.(selection.current); }, [active, positions]);
 
