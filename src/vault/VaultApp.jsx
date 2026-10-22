@@ -911,7 +911,10 @@ function VaultReader({
 
   if (!rendered.html) return <div className="vault-reader-loading">TRANSFORMING NOTE / QUARTZ OFM…</div>;
 
-  return <div className="vault-brief">
+  return <div
+    className="vault-brief"
+    data-readme={/(?:^|\/)readme\.(?:md|markdown|mdown)$/i.test(file.path) || undefined}
+  >
     <DocumentMeta
       editDisabled={editDisabled}
       file={file}

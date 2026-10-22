@@ -95,6 +95,8 @@ expanded chart details, so the document scrolls with the page.
 Add `class="print-hidden"` to supporting HTML, such as chart utility links and
 interactive disclosures, to omit it from print. Document links print as plain text
 without PDF link annotations; their targets are restored after printing.
+README printouts use 10pt text with closer line, paragraph and heading spacing.
+Other project notes retain their existing print layout.
 Store static SVG/PNG fallbacks in `print/` folders for Obsidian compatibility. These
 folders, and existing `.print/` folders, stay out of navigation by default while
 remaining available to embeds, direct links and historical snapshots.

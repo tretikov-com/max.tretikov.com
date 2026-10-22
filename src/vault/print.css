@@ -267,4 +267,32 @@
   .vault-brief .vault-article details::details-content {
     content-visibility: visible;
   }
+
+  .vault-brief[data-readme] .vault-brief-masthead {
+    gap: 4pt;
+    margin-bottom: 12pt;
+    padding-bottom: 8pt;
+  }
+
+  .vault-brief[data-readme] .vault-article {
+    font-size: 10pt;
+    line-height: 1.35;
+  }
+
+  .vault-brief[data-readme] .vault-article h1 {
+    margin-bottom: 10pt;
+  }
+
+  .vault-brief[data-readme] .vault-article h1::after {
+    margin-top: 6pt;
+  }
+
+  .vault-brief[data-readme] .vault-article h2 {
+    margin: 12pt 0 6pt;
+    padding-top: 6pt;
+  }
+
+  .vault-brief[data-readme] .vault-article p {
+    margin-bottom: 6pt;
+  }
 }
