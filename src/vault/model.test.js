@@ -72,24 +72,26 @@ test("extension filters hide matching files case-insensitively and omit empty fo
   assert.equal(buildVaultTree(files).fileCount, files.length);
 });
 
-test("print fallback directories are hidden from navigation while their assets remain resolvable", () => {
-  const snapshot = createSnapshot({ id: "research" }, "revision", [
-    { path: "README.md", type: "markdown" },
-    { path: ".print/preview.svg", type: "asset" },
-    { path: ".print/preview.png", type: "asset" },
-    { path: "notes/.print/figure.svg", type: "asset" },
-    { path: "notes/guide.md", type: "markdown" },
-    { path: ".print-notes.md", type: "markdown" },
-  ]);
-  assert.equal(snapshot.files.length, 6);
-  assert.equal(snapshot.tree.fileCount, 3);
-  assert.deepEqual(snapshot.tree.children.map((node) => node.name), ["notes", ".print-notes.md", "README.md"]);
-  assert.deepEqual(snapshot.tree.children[0].children.map((node) => node.name), ["guide.md"]);
-  const paths = snapshot.files.map((file) => file.path);
-  assert.equal(resolveAssetTarget(".print/preview.svg", "README.md", paths), ".print/preview.svg");
-  assert.equal(resolveAssetTarget(".print/figure.svg", "notes/guide.md", paths), "notes/.print/figure.svg");
-  assert.deepEqual(resolveVaultTarget(".print/preview.png", "README.md", paths), { path: ".print/preview.png", anchor: "" });
-});
+for (const directory of ["print", ".print"]) {
+  test(`${directory}/ fallback directories stay hidden while their assets remain resolvable`, () => {
+    const snapshot = createSnapshot({ id: "research" }, "revision", [
+      { path: "README.md", type: "markdown" },
+      { path: `${directory}/preview.svg`, type: "asset" },
+      { path: `${directory}/preview.png`, type: "asset" },
+      { path: `notes/${directory}/figure.svg`, type: "asset" },
+      { path: "notes/guide.md", type: "markdown" },
+      { path: `${directory}-notes.md`, type: "markdown" },
+    ]);
+    assert.equal(snapshot.files.length, 6);
+    assert.equal(snapshot.tree.fileCount, 3);
+    assert.deepEqual(snapshot.tree.children.map((node) => node.name), ["notes", `${directory}-notes.md`, "README.md"]);
+    assert.deepEqual(snapshot.tree.children[0].children.map((node) => node.name), ["guide.md"]);
+    const paths = snapshot.files.map((file) => file.path);
+    assert.equal(resolveAssetTarget(`${directory}/preview.svg`, "README.md", paths), `${directory}/preview.svg`);
+    assert.equal(resolveAssetTarget(`${directory}/figure.svg`, "notes/guide.md", paths), `notes/${directory}/figure.svg`);
+    assert.deepEqual(resolveVaultTarget(`${directory}/preview.png`, "README.md", paths), { path: `${directory}/preview.png`, anchor: "" });
+  });
+}
 
 test("project routes preserve nested note paths", () => {
   const pathname = projectHref("research notes", "A folder/Field #1.md");
