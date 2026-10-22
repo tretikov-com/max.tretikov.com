@@ -119,6 +119,17 @@ export async function renderHtmlPreviews(article, { file, snapshot, source, revi
       frame.title = link.querySelector("img").alt || asset.path;
       frame.srcdoc = html;
       cleanups.push(fitHtmlDocument(frame));
+      const disclosure = (link.closest("p") || link).nextElementSibling;
+      if (disclosure?.matches("details.rfna-interactive-chart")) {
+        const previousHidden = disclosure.getAttribute("hidden");
+        const hideDisclosure = () => disclosure.setAttribute("hidden", "");
+        frame.addEventListener("load", hideDisclosure, { once: true });
+        cleanups.push(() => {
+          frame.removeEventListener("load", hideDisclosure);
+          if (previousHidden === null) disclosure.removeAttribute("hidden");
+          else disclosure.setAttribute("hidden", previousHidden);
+        });
+      }
       link.replaceWith(wrapper);
       wrapper.append(frame, link);
       cleanups.push(() => wrapper.replaceWith(link));
