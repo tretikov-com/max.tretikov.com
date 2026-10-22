@@ -73,10 +73,11 @@ export function buildVaultTree(files, hideFromTree = {}) {
     .filter((file) => normalizePath(file.path))
     .forEach((file) => {
       const path = normalizePath(file.path);
+      const parts = path.split("/");
+      if (parts.slice(0, -1).includes(".print")) return;
       if (hiddenPaths.some((hidden) => path === hidden || path.startsWith(`${hidden}/`))) return;
       if (hiddenExtensions.some((extension) => path.toLowerCase().endsWith(extension))) return;
       root.fileCount += 1;
-      const parts = path.split("/");
       let parent = root;
       let parentPath = "";
 
