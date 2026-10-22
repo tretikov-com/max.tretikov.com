@@ -20,11 +20,14 @@ import {
   resolveAssetTarget,
   resolveNoteTarget,
   resolveRepositoryTarget,
+  resolveVaultTarget,
 } from "./model.js";
 import { navigateTo } from "../navigation.js";
 import { configuredSources } from "./sources.js";
 import { waitForPrintAssets } from "./print.js";
 import { renderCharts } from "./charts.js";
+import HtmlDocument from "./HtmlDocument.jsx";
+import { renderHtmlPreviews } from "./html-document.js";
 import "./print.css";
 
 const VaultEditor = React.lazy(() => import("../secret/VaultEditor.jsx"));
@@ -301,12 +304,6 @@ function VaultSidebar({
 
 function findFile(snapshot, path) {
   return snapshot.files.find((file) => file.path === path);
-}
-
-function cleanInternalTarget(value) {
-  return String(value || "")
-    .replace(/\.html(?=#|$)/i, "")
-    .replace(/%20/g, " ");
 }
 
 function findNoteAnchor(container, fragment) {
@@ -781,24 +778,14 @@ function VaultReader({
         return;
       }
 
-      const target = resolveNoteTarget(
-        cleanInternalTarget(href),
-        link.closest("[data-source-path]")?.dataset.sourcePath || file.path,
+      const sourcePath = link.closest("[data-source-path]")?.dataset.sourcePath || file.path;
+      const target = resolveVaultTarget(
+        href,
+        sourcePath,
         snapshot.files.map((candidate) => candidate.path),
       );
       if (target) {
         link.setAttribute("href", `${projectHref(source, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`);
-        return;
-      }
-
-      const sourcePath = link.closest("[data-source-path]")?.dataset.sourcePath || file.path;
-      const assetPath = resolveAssetTarget(
-        cleanInternalTarget(href),
-        sourcePath,
-        snapshot.files.map((candidate) => candidate.path),
-      );
-      if (assetPath) {
-        link.setAttribute("href", projectHref(source, assetPath, { revision }));
         return;
       }
 
@@ -858,6 +845,9 @@ function VaultReader({
           }
         }
       }));
+      if (cancelled) return;
+
+      await renderHtmlPreviews(article, { file, snapshot, source, revision, signal: assetController.signal });
       if (cancelled) return;
 
       await renderCharts(article, { signal: assetController.signal });
@@ -983,19 +973,21 @@ function useAssetUrl(source, snapshot, file) {
   return asset.key === key ? asset : { url: null, error: null };
 }
 
-function AssetReader({ file, onHistory, snapshot, source }) {
+function AssetReader({ file, onHistory, revision, snapshot, source }) {
   const extension = file.path.split(".").pop()?.toUpperCase() || "FILE";
   const { url: rawUrl, error } = useAssetUrl(source, snapshot, file);
   const image = /\.(?:avif|gif|jpe?g|png|svg|webp)$/i.test(file.path);
+  const html = /\.html?$/i.test(file.path);
 
   return <>
     <DocumentMeta
       file={file}
       onHistory={onHistory}
     />
-    <div className="vault-asset">
-      <h1>{file.path.split("/").at(-1)}</h1>
+    <div className={html ? "vault-html-asset" : "vault-asset"}>
       {error && <p role="alert">{error.message}</p>}
+      {html ? !error && <HtmlDocument file={file} revision={revision} snapshot={snapshot} source={source} url={rawUrl} /> : <>
+      <h1>{file.path.split("/").at(-1)}</h1>
       <dl>
         <div><dt>TYPE</dt><dd>REPOSITORY OBJECT / {extension}</dd></div>
         <div><dt>PATH</dt><dd>{file.repoPath}</dd></div>
@@ -1003,8 +995,9 @@ function AssetReader({ file, onHistory, snapshot, source }) {
         <div><dt>SIZE</dt><dd>{file.size ? `${file.size.toLocaleString()} BYTES` : "UNAVAILABLE"}</dd></div>
       </dl>
       {image && rawUrl && <img src={rawUrl} alt={file.path.split("/").at(-1)} />}
+      </>}
       {rawUrl && <a className="vault-action" href={rawUrl} rel="noreferrer" target="_blank">
-        OPEN RAW OBJECT <span>↗</span>
+        {html ? "OPEN HTML SOURCE" : "OPEN RAW OBJECT"} <span>↗</span>
       </a>}
     </div>
   </>;
@@ -1520,8 +1513,10 @@ function VaultView({ account, anchor, notePath, revision, source }) {
             />
             : file
               ? <AssetReader
+                key={`${snapshot.commitSha}:${file.path}`}
                 file={file}
                 onHistory={() => setHistoryMode("file")}
+                revision={revision}
                 snapshot={snapshot}
                 source={source}
               />

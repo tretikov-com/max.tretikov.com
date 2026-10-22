@@ -302,6 +302,15 @@ export function resolveRepositoryTarget(target, currentRepositoryPath) {
   return normalizePath(`${currentDirectory}/${decodedPath}`);
 }
 
+export function resolveVaultTarget(target, currentPath, allPaths) {
+  const [requested, ...fragment] = String(target || "").split("#");
+  const path = requested.split("?", 1)[0];
+  const anchor = fragment.join("#");
+  const asset = resolveAssetTarget(path, currentPath, allPaths);
+  if (asset) return { path: asset, anchor };
+  return resolveNoteTarget(`${path.replace(/\.html?$/i, "")}${anchor ? `#${anchor}` : ""}`, currentPath, allPaths);
+}
+
 export function rawGithubUrl(source, commitSha, repositoryPath) {
   const encodedPath = normalizePath(repositoryPath).split("/").map(encodeURIComponent).join("/");
   return `https://raw.githubusercontent.com/${encodeURIComponent(source.owner)}/${encodeURIComponent(source.repo)}/${encodeURIComponent(commitSha)}/${encodedPath}`;

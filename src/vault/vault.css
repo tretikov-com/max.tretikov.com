@@ -146,6 +146,10 @@ body[data-view="vault"] #root{height:auto;min-height:100%;overflow:visible;}
 .vault-asset dt{color:var(--vault-violet-dark);font-weight:700;letter-spacing:.12em;}
 .vault-asset dd{margin:0;overflow-wrap:anywhere;}
 .vault-asset img{display:block;max-width:100%;max-height:70vh;margin:38px 0;border:1px solid var(--vault-line);object-fit:contain;}
+.vault-html-asset{padding:24px 0;}
+.vault-html-document{display:block;width:100%;height:max(640px,calc(100dvh - 190px));margin-bottom:24px;border:1px solid var(--vault-line);background:#fff;}
+.vault-html-embed{display:block;}
+.vault-html-embed>a{display:none;}
 
 .vault-history{max-width:1060px;margin:0 auto;padding:clamp(46px,7vw,84px) 0 36px;}
 .vault-history-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:38px;align-items:start;padding-bottom:40px;border-bottom:2px solid var(--vault-ink);}

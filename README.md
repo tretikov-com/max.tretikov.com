@@ -81,7 +81,13 @@ export const VAULT_SOURCES = [
 `root`, `exclude`, and `pollIntervalMs` are optional. Repositories must be public.
 The full tree under `root` is indexed, including non-Markdown repository objects.
 Markdown is rendered in place; other files receive a repository-object view and an
-immutable raw link.
+immutable raw link. HTML files open at their project URL in an isolated document viewer
+that runs their scripts. Self-contained interactive HTML works directly; links to other
+vault files return to the site reader and preserve a selected historical revision.
+Private HTML is loaded through authenticated GitHub access and stays in the browser
+session. The document frame cannot read the site's saved login or parent page.
+An image linked to a vault HTML file displays the live HTML inside the note. Its
+original image remains the PDF/print fallback and stays visible if the HTML cannot load.
 
 To hide supporting files from navigation, add `hideFromTree` to the source descriptor:
 

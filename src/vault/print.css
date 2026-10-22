@@ -11,6 +11,11 @@
   display: none;
 }
 
+@media print {
+  .vault-html-embed>.vault-html-document { display: none; }
+  .vault-html-embed>a { display: block; }
+}
+
 @page project-brief {
   size: Letter;
   margin: .65in;

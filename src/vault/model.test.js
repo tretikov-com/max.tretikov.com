@@ -10,6 +10,7 @@ import {
   resolveAssetTarget,
   resolveNoteTarget,
   resolveRepositoryTarget,
+  resolveVaultTarget,
 } from "./model.js";
 
 test("frontmatter is separated from note content", () => {
@@ -205,6 +206,13 @@ test("Quartz-slugified targets resolve to filenames containing spaces", () => {
 test("relative asset paths resolve beside the current note", () => {
   const paths = ["Notes/Field.md", "Notes/assets/diagram.svg", "other/diagram.svg"];
   assert.equal(resolveAssetTarget("assets/diagram.svg", "Notes/Field.md", paths), "Notes/assets/diagram.svg");
+});
+
+test("HTML document links resolve to actual assets before generated Markdown URLs", () => {
+  const paths = ["README.md", "figures/chart.html", "figures/chart.md", "research/Evidence.md"];
+  assert.deepEqual(resolveVaultTarget("figures/chart.html", "README.md", paths), { path: "figures/chart.html", anchor: "" });
+  assert.deepEqual(resolveVaultTarget("../research/Evidence.html#methods", "figures/chart.html", paths), { path: "research/Evidence.md", anchor: "methods" });
+  assert.deepEqual(resolveVaultTarget("../research/Evidence.md?view=1#methods", "figures/chart.html", paths), { path: "research/Evidence.md", anchor: "methods" });
 });
 
 test("explicit asset parent traversal does not fall through to a same-name suffix", () => {
