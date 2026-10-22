@@ -18,6 +18,10 @@
   "dependencies": {
     "@giscus/react": "^3.1.0",
     "@quartz-community/obsidian-flavored-markdown": "github:quartz-community/obsidian-flavored-markdown",
+    "chart.js": "^4.6.1",
+    "chartjs-adapter-date-fns": "^3.0.0",
+    "chartjs-chart-sankey": "^0.19.1",
+    "date-fns": "^4.4.0",
     "idb": "^8.0.3",
     "katex": "^0.16.22",
     "mermaid": "^11.12.1",

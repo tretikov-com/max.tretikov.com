@@ -43,3 +43,52 @@ test("unsafe HTML is sanitized", async () => {
   assert.doesNotMatch(result.html, /script|onclick/);
   assert.match(result.html, /safe/);
 });
+
+test("Quartz preserves Charts blocks and their literal data for browser rendering", async () => {
+  const result = await renderMarkdown(`
+\`\`\`chart
+type: bar
+labels: ['<script>alert(1)</script>']
+series:
+  - title: Samples
+    data: [3]
+\`\`\`
+
+\`\`\`advanced-chart
+{"type":"pie","data":{"labels":["A"],"datasets":[{"data":[1]}]}}
+\`\`\`
+`);
+  assert.match(result.html, /<pre><code class="language-chart">/);
+  assert.match(result.html, /<pre><code class="language-advanced-chart">/);
+  assert.match(result.html, /&#x3C;script>alert\(1\)&#x3C;\/script>/);
+  assert.doesNotMatch(result.html, /<script>/);
+});
+
+test("block-scoped chart embeds retain the sanitized anchor and disclosure markup", async () => {
+  const chart = await renderMarkdown(`
+\`\`\`chart
+type: pie
+labels: [A, B]
+series:
+  - title: Samples
+    data: [3, 5]
+legend: false
+width: "min(100%, 560px)"
+\`\`\`
+
+^chart-example
+`, { path: "figures/chart.md" });
+  assert.match(chart.html, /<pre id="user-content-chart-example"><code class="language-chart">/);
+
+  const readme = await renderMarkdown(`
+<details hidden class="interactive-chart">
+<summary>Interactive chart</summary>
+
+![[figures/chart#^chart-example]]
+
+</details>
+`, { path: "README.md" });
+  assert.match(readme.html, /<details class="interactive-chart">/);
+  assert.match(readme.html, /data-url="figures\/chart" data-block="#\^chart-example"/);
+  assert.doesNotMatch(readme.html, /\bhidden\b/);
+});

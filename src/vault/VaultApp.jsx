@@ -23,6 +23,7 @@ import {
 import { navigateTo } from "../navigation.js";
 import { configuredSources } from "./sources.js";
 import { waitForPrintAssets } from "./print.js";
+import { renderCharts } from "./charts.js";
 import "./print.css";
 
 const VaultEditor = React.lazy(() => import("../secret/VaultEditor.jsx"));
@@ -305,12 +306,16 @@ function cleanInternalTarget(value) {
     .replace(/%20/g, " ");
 }
 
+function findNoteAnchor(container, fragment) {
+  const reference = decodeURIComponent(fragment.replace(/^#/, "")).replace(/^\^/, "");
+  return [...container.querySelectorAll("[id]")].find((node) => (
+    node.id === reference || node.id === `user-content-${reference}`
+  ));
+}
+
 function transclusionNodes(container, blockReference) {
   if (!blockReference) return [...container.childNodes];
-  const reference = decodeURIComponent(blockReference.replace(/^#/, ""));
-  const target = [...container.querySelectorAll("[id]")].find((node) => (
-    node.id === reference || node.id === reference.replace(/^\^/, "")
-  ));
+  const target = findNoteAnchor(container, blockReference);
   if (!target) return [];
   if (!/^h[1-6]$/i.test(target.tagName)) return [target];
 
@@ -815,9 +820,7 @@ function VaultReader({
       article.querySelectorAll("a[href]").forEach(prepareLink);
 
       if (anchor) {
-        const decodedAnchor = decodeURIComponent(anchor).replace(/^\^/, "");
-        const anchorTarget = [...article.querySelectorAll("[id]")].find((node) => node.id === decodedAnchor);
-        anchorTarget?.scrollIntoView({ block: "start" });
+        findNoteAnchor(article, anchor)?.scrollIntoView({ block: "start" });
       }
 
       const allPaths = snapshot.files.map((candidate) => candidate.path);
@@ -852,6 +855,9 @@ function VaultReader({
           }
         }
       }));
+      if (cancelled) return;
+
+      await renderCharts(article, { signal: assetController.signal });
       if (cancelled) return;
 
       const diagrams = [...article.querySelectorAll("code.mermaid")];

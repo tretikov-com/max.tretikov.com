@@ -134,6 +134,8 @@ body[data-view="vault"] #root{height:auto;min-height:100%;overflow:visible;}
 .vault-article .katex-display{max-width:100%;overflow-x:auto;overflow-y:hidden;padding:18px 0;}
 .vault-article pre:has(>code.mermaid){display:flex;justify-content:center;max-width:100%;margin:2em 0;padding:24px;border:1px solid var(--vault-line);background:#fff;color:var(--vault-ink);overflow:auto;}
 .vault-article code.mermaid{display:block;max-width:100%;padding:0;background:transparent;}
+.vault-article .vault-chart{position:relative;max-width:100%;height:clamp(260px,45vw,420px);margin:2em auto;padding:16px;border:1px solid var(--vault-line);background:#fff;}
+.vault-article .vault-chart-error{color:var(--vault-violet-dark);font:12px/1.6 "Space Mono",monospace;}
 .vault-article input[type="checkbox"]{accent-color:var(--vault-violet);}
 
 .vault-asset{max-width:860px;margin:0 auto;padding-top:clamp(52px,8vw,92px);}

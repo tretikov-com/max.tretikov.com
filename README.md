@@ -109,8 +109,33 @@ While the reader is open, it polls the configured branch every five minutes by d
 
 Markdown is transformed by the MIT-licensed Quartz Obsidian-flavored Markdown package.
 The surrounding explorer, commit cache, link resolver, asset resolver, and recursive
-transclusion pass are local to this site. KaTeX and Mermaid are rendered in the browser.
+transclusion pass are local to this site. KaTeX, Mermaid, and Obsidian Charts are rendered in the browser.
 Quartz's license is shipped with the built site in `THIRD_PARTY_NOTICES.txt`.
+
+### Charts
+
+Notes and transcluded notes support [Obsidian Charts](https://github.com/phibr0/obsidian-charts)
+with inline YAML data:
+
+````markdown
+```chart
+type: line
+labels: [Baseline, Experiment]
+series:
+  - title: Accuracy
+    data: [72, 91]
+beginAtZero: true
+yTitle: Accuracy (%)
+```
+````
+
+Supported types are `bar`, `line`, `pie`, `doughnut`, `radar`, `polarArea`, `scatter`,
+`bubble`, and `sankey`. Series accept Chart.js dataset options. Chart modifiers include
+width, fill, tension, stacking, axis limits and titles, legend settings, per-label colors,
+and time axes. `advanced-chart` blocks accept JSON Chart.js configurations. JavaScript
+callbacks, Dataview, and `id`/`file` references to Markdown tables are not supported.
+Invalid charts display an error beside their source block. Chart.js and the date/Sankey
+adapters load only when needed; charts resize for printing and are released on navigation.
 
 ## GitHub frontend transport
 
