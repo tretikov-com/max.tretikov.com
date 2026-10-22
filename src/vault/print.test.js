@@ -41,12 +41,34 @@ test("leaving a document during print restores links and removes print listeners
 });
 
 function articleWith(images = [], fonts = Promise.resolve()) {
+  images.forEach((image) => { image.closest ||= () => null; });
   return {
     isConnected: true,
     ownerDocument: { fonts: { ready: fonts } },
     querySelectorAll: () => images,
   };
 }
+
+test("print-hidden figures can fail while the HTML preview's SVG fallback still must decode", async () => {
+  let finishFallback;
+  let hiddenDecodes = 0;
+  const omitted = {
+    loading: "lazy",
+    closest: () => ({}),
+    decode: () => { hiddenDecodes += 1; return Promise.reject(new Error("Hidden image unavailable")); },
+  };
+  const fallback = { loading: "lazy", decode: () => new Promise((resolve) => { finishFallback = resolve; }) };
+  let ready = false;
+  const pending = waitForPrintAssets(articleWith([omitted, fallback])).then(() => { ready = true; });
+  assert.equal(hiddenDecodes, 0);
+  assert.equal(omitted.loading, "lazy");
+  assert.equal(fallback.loading, "eager");
+  await Promise.resolve();
+  assert.equal(ready, false);
+  finishFallback();
+  await pending;
+  assert.equal(ready, true);
+});
 
 test("printing waits for both fonts and image decoding, including lazy figures", async () => {
   let finishFonts;

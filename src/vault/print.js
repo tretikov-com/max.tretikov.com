@@ -26,16 +26,17 @@ export function installPrintLinkHandling(article) {
   };
 }
 
-// Wait for the same fonts and figures the reader displays before opening print.
+// Wait for printed figures, including the live HTML preview's SVG fallback.
 export async function waitForPrintAssets(article, timeoutMs = 15_000) {
   if (!article?.isConnected) throw new Error("The project brief is no longer open.");
+  const images = [...article.querySelectorAll("img")].filter((image) => !image.closest(".print-hidden"));
 
   let timer;
   try {
     await Promise.race([
       Promise.all([
         article.ownerDocument.fonts.ready,
-        ...[...article.querySelectorAll("img")].map((image) => {
+        ...images.map((image) => {
           image.loading = "eager";
           return image.decode().catch(() => {
             throw new Error("A figure could not load. Check your connection and try again.");
