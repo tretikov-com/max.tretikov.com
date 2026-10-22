@@ -12,6 +12,7 @@ import {
   syncSource,
 } from "./github.js";
 import {
+  buildVaultTree,
   isFullCommitSha,
   parseProjectsPath,
   projectHref,
@@ -257,11 +258,13 @@ function VaultSidebar({
   source,
   status,
 }) {
+  const tree = useMemo(() => buildVaultTree(snapshot.files, source.hideFromTree), [snapshot.files, source.hideFromTree]);
+
   return <aside className="vault-sidebar">
     <div className="vault-sidebar-head">
       <span>{source.root ? `${source.root} / TREE` : "FILE SYSTEM"}</span>
       <div className="vault-sidebar-tools">
-        <span>{snapshot.files.length} FILES</span>
+        <span>{tree.fileCount} FILES</span>
         {onNewNote && <button
           aria-label="Create a new note"
           disabled={newNoteDisabled}
@@ -273,7 +276,7 @@ function VaultSidebar({
     </div>
     <nav aria-label={`${source.label} files`}>
       <ul className="vault-tree-root">
-        {snapshot.tree.children.map((node) => <FileTreeNode
+        {tree.children.map((node) => <FileTreeNode
           activePath={activePath}
           key={`${node.type}:${node.path}`}
           node={node}

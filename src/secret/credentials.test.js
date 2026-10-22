@@ -46,6 +46,32 @@ test("configuration errors fail the build without echoing input credentials", as
   assert.deepEqual(await buildAccessManifest(""), { version: 1, users: {} });
 });
 
+test("private source visibility settings survive encrypted access without excluding files", async () => {
+  const input = structuredClone(config);
+  input.projects[0].hideFromTree = { paths: ["figures"], extensions: [".svg", ".png"] };
+  const manifest = await buildAccessManifest(JSON.stringify(input));
+  const access = await unlockAccess(manifest, input.users[0].username, input.users[0].password);
+  assert.deepEqual(access.projects[0].hideFromTree, input.projects[0].hideFromTree);
+  assert.deepEqual(access.projects[0].exclude, [".obsidian"]);
+});
+
+test("invalid tree visibility settings fail configuration validation", async () => {
+  for (const hidden of [
+    null,
+    ["figures"],
+    { paths: "figures" },
+    { paths: ["../figures"] },
+    { paths: [""] },
+    { extensions: "png" },
+    { extensions: ["png"] },
+    { extensions: [".png/other"] },
+  ]) {
+    const input = structuredClone(config);
+    input.projects[0].hideFromTree = hidden;
+    await assert.rejects(buildAccessManifest(JSON.stringify(input)), /hideFromTree/);
+  }
+});
+
 
 test("individual sign-ins unlock one shared GitHub token and retain distinct contributor identities", async () => {
   const shared = structuredClone(config);

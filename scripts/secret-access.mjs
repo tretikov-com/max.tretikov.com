@@ -22,6 +22,12 @@ export async function buildAccessManifest(input) {
     requireValue(/^[\w.-]+$/.test(project.owner || "") && /^[\w.-]+$/.test(project.repo || ""), "each project needs a GitHub owner and repository.");
     requireValue(validPath(project.root || ""), "project roots must be relative repository paths.");
     requireValue(!project.exclude || (Array.isArray(project.exclude) && project.exclude.every(validPath)), "exclude must contain relative paths.");
+    if (project.hideFromTree !== undefined) {
+      const hidden = project.hideFromTree;
+      requireValue(hidden && typeof hidden === "object" && !Array.isArray(hidden), "hideFromTree must contain paths and/or extensions arrays.");
+      requireValue(hidden.paths === undefined || (Array.isArray(hidden.paths) && hidden.paths.every((path) => validPath(path) && path.trim())), "hideFromTree.paths must contain nonempty relative vault paths.");
+      requireValue(hidden.extensions === undefined || (Array.isArray(hidden.extensions) && hidden.extensions.every((extension) => typeof extension === "string" && /^\.[a-z0-9][a-z0-9._-]*$/i.test(extension))), "hideFromTree.extensions must contain file extensions beginning with a dot.");
+    }
     requireValue(!project.ref || (typeof project.ref === "string" && !/[\s~^:?*\[\\]/.test(project.ref)), "ref must name a branch.");
     projects.set(project.id, {
       id: project.id,
@@ -31,6 +37,7 @@ export async function buildAccessManifest(input) {
       ref: project.ref || "main",
       root: (project.root || "").replace(/\/+$/, ""),
       exclude: project.exclude || [".obsidian"],
+      ...(project.hideFromTree ? { hideFromTree: project.hideFromTree } : {}),
     });
   }
   const users = {};

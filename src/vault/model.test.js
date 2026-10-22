@@ -33,6 +33,44 @@ test("vault tree sorts folders before files and preserves exact filenames", () =
   assert.equal(tree.children[1].fileType, "asset");
 });
 
+test("hidden figure folders stay in the snapshot and resolve from README embeds", () => {
+  const source = { id: "research", hideFromTree: { paths: ["figures/"] } };
+  const snapshot = createSnapshot(source, "revision", [
+    { path: "README.md", type: "markdown", content: "![[figures/chart#^plot]]\n\n![Plot](figures/plot.svg)" },
+    { path: "figures/chart.md", type: "markdown", content: "Chart data" },
+    { path: "figures/plot.svg", type: "asset" },
+    { path: "figures/nested/plot.png", type: "asset" },
+    { path: "figures-notes/guide.md", type: "markdown", content: "# Guide" },
+  ]);
+  const tree = buildVaultTree(snapshot.files, source.hideFromTree);
+  assert.deepEqual(tree.children.map((node) => node.name), ["figures-notes", "README.md"]);
+  assert.equal(tree.fileCount, 2);
+  assert.equal(snapshot.files.length, 5);
+  const paths = snapshot.files.map((file) => file.path);
+  assert.deepEqual(resolveNoteTarget("figures/chart#^plot", "README.md", paths), { path: "figures/chart.md", anchor: "^plot" });
+  assert.equal(resolveAssetTarget("figures/plot.svg", "README.md", paths), "figures/plot.svg");
+  assert.equal(resolveAssetTarget("figures/nested/plot.png", "README.md", paths), "figures/nested/plot.png");
+  assert.equal(snapshot.files.find((file) => file.path === "figures/chart.md").content, "Chart data");
+  assert.ok(snapshot.tree.children.some((node) => node.name === "figures"));
+});
+
+test("extension filters hide matching files case-insensitively and omit empty folders", () => {
+  const files = [
+    { path: "README.md" },
+    { path: "figures/chart.md" },
+    { path: "figures/plot.SVG", type: "asset" },
+    { path: "attachments/preview.PNG", type: "asset" },
+    { path: "chart.html", type: "asset" },
+    { path: "plot.svg.md" },
+    { path: "notes/private.md" },
+  ];
+  const tree = buildVaultTree(files, { paths: ["notes/private.md"], extensions: [".SVG", ".png", ".html"] });
+  assert.deepEqual(tree.children.map((node) => node.name), ["figures", "plot.svg.md", "README.md"]);
+  assert.deepEqual(tree.children[0].children.map((node) => node.name), ["chart.md"]);
+  assert.equal(tree.fileCount, 3);
+  assert.equal(buildVaultTree(files).fileCount, files.length);
+});
+
 test("project routes preserve nested note paths", () => {
   const pathname = projectHref("research notes", "A folder/Field #1.md");
   assert.equal(pathname, "/projects/research%20notes/A%20folder/Field%20%231.md");

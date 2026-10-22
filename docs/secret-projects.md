@@ -49,6 +49,21 @@ existing branch. `root` is the directory to display and edit; use `""` for the
 repository root. Repository details and author information are encrypted along
 with the token. The public project index uses `src/vault/sources.js` independently.
 
+To hide RfNA's supporting figures from the file browser, add this field to its
+project object in `SECRET_PROJECT_ACCESS`:
+
+```json
+"hideFromTree": { "paths": ["figures"] }
+```
+
+Paths are relative to the configured `root`. This hides the folder and its contents
+from navigation while keeping them loaded for Markdown embeds, Charts, direct links,
+and PDF printing. Files stay in their repository locations, available to GitHub and
+local Obsidian. To hide asset types throughout a project, use
+`"hideFromTree": { "extensions": [".svg", ".png", ".html"] }`; both lists can be
+combined. Keep supporting assets out of `exclude` and `.obsidian`. Rebuild and redeploy
+after changing the access configuration.
+
 Generate a unique random password for each person, for example with
 `openssl rand -base64 24`. Passwords must have at least 16 characters. Usernames
 are case-insensitive. Share the username and password privately with the intended

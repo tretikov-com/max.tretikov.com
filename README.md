@@ -83,6 +83,22 @@ The full tree under `root` is indexed, including non-Markdown repository objects
 Markdown is rendered in place; other files receive a repository-object view and an
 immutable raw link.
 
+To hide supporting files from navigation, add `hideFromTree` to the source descriptor:
+
+```js
+hideFromTree: {
+  paths: ["figures"],
+  extensions: [".png", ".svg", ".html"],
+},
+```
+
+`paths` matches files or whole folders relative to `root`; `extensions` matches filename
+suffixes without regard to case. Either list can be omitted. The file count includes
+only visible entries. Hidden files stay in the loaded snapshot and remain available to
+Markdown images, chart transclusions, direct links, historical revisions, and printing.
+These settings also apply to already cached snapshots. `exclude` instead prevents
+loading the files, so use `hideFromTree` for supporting assets.
+
 The **Repository history** control at the bottom of the file tree opens repository history. Selecting
 a revision checks out the complete configured tree at that immutable commit and records
 the selection as `?rev=<commit-sha>`, so it survives refreshes and can be shared. The

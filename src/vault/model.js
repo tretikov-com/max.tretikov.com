@@ -63,14 +63,19 @@ function compareNodes(a, b) {
   return a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: "base" });
 }
 
-export function buildVaultTree(files) {
-  const root = { type: "folder", name: "ROOT", path: "", children: [] };
+export function buildVaultTree(files, hideFromTree = {}) {
+  const hiddenPaths = (hideFromTree.paths || []).map(normalizePath).filter(Boolean);
+  const hiddenExtensions = (hideFromTree.extensions || []).map((extension) => extension.toLowerCase());
+  const root = { type: "folder", name: "ROOT", path: "", children: [], fileCount: 0 };
   const folders = new Map([["", root]]);
 
   files
     .filter((file) => normalizePath(file.path))
     .forEach((file) => {
       const path = normalizePath(file.path);
+      if (hiddenPaths.some((hidden) => path === hidden || path.startsWith(`${hidden}/`))) return;
+      if (hiddenExtensions.some((extension) => path.toLowerCase().endsWith(extension))) return;
+      root.fileCount += 1;
       const parts = path.split("/");
       let parent = root;
       let parentPath = "";
