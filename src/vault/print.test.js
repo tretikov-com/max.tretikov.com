@@ -1,6 +1,44 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { waitForPrintAssets } from "./print.js";
+import { installPrintLinkHandling, waitForPrintAssets } from "./print.js";
+
+function printFixture() {
+  const view = new EventTarget();
+  const attributes = new Map([
+    ["href", { name: "href", value: "/projects/rfna/evidence.md" }],
+    ["xlink:href", { name: "xlink:href", value: "#diagram", namespaceURI: "http://www.w3.org/1999/xlink" }],
+  ]);
+  const original = [...attributes.values()];
+  const link = {
+    getAttributeNode: (name) => attributes.get(name),
+    removeAttributeNode: (attribute) => attributes.delete(attribute.name),
+    setAttributeNode: (attribute) => attributes.set(attribute.name, attribute),
+  };
+  const article = { ownerDocument: { defaultView: view }, querySelectorAll: () => [link] };
+  return { article, view, attributes, original };
+}
+
+test("native print removes link targets and restores the original attributes afterward", () => {
+  const { article, view, attributes, original } = printFixture();
+  const cleanup = installPrintLinkHandling(article);
+  assert.deepEqual([...attributes.values()], original);
+  view.dispatchEvent(new Event("beforeprint"));
+  assert.equal(attributes.size, 0);
+  view.dispatchEvent(new Event("beforeprint"));
+  view.dispatchEvent(new Event("afterprint"));
+  assert.deepEqual([...attributes.values()], original);
+  cleanup();
+});
+
+test("leaving a document during print restores links and removes print listeners", () => {
+  const { article, view, attributes, original } = printFixture();
+  const cleanup = installPrintLinkHandling(article);
+  view.dispatchEvent(new Event("beforeprint"));
+  cleanup();
+  assert.deepEqual([...attributes.values()], original);
+  view.dispatchEvent(new Event("beforeprint"));
+  assert.deepEqual([...attributes.values()], original);
+});
 
 function articleWith(images = [], fonts = Promise.resolve()) {
   return {

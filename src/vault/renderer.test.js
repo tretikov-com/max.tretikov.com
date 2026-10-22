@@ -92,3 +92,17 @@ width: "min(100%, 560px)"
   assert.match(readme.html, /data-url="figures\/chart" data-block="#\^chart-example"/);
   assert.doesNotMatch(readme.html, /\bhidden\b/);
 });
+
+test("print visibility classes survive sanitizing supporting chart markup", async () => {
+  const result = await renderMarkdown(`
+<div class="print-hidden">
+
+[Chart details](figures/chart.html)
+
+</div>
+
+<details class="interactive-chart print-hidden"><summary>Interactive chart</summary></details>
+`, { path: "README.md" });
+  assert.match(result.html, /<div class="print-hidden">/);
+  assert.match(result.html, /<details class="interactive-chart print-hidden">/);
+});

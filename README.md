@@ -90,6 +90,9 @@ An image linked to a vault HTML file displays the live HTML inside the note. Its
 original image remains the PDF/print fallback and stays visible if the HTML cannot load.
 HTML frames grow and shrink to fit their content, including viewport changes and
 expanded chart details, so the document scrolls with the page.
+Add `class="print-hidden"` to supporting HTML, such as chart utility links and
+interactive disclosures, to omit it from print. Document links print as plain text
+without PDF link annotations; their targets are restored after printing.
 
 To hide supporting files from navigation, add `hideFromTree` to the source descriptor:
 

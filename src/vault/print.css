@@ -12,6 +12,7 @@
 }
 
 @media print {
+  .vault-brief .vault-article .print-hidden { display: none !important; }
   .vault-html-embed>.vault-html-document { display: none; }
   .vault-html-embed>a { display: block; }
 }
@@ -149,8 +150,11 @@
 
   .vault-brief .vault-article a {
     color: inherit;
-    text-decoration-color: #a49bab;
-    text-underline-offset: 2pt;
+    text-decoration: none;
+  }
+
+  .vault-brief .vault-article a::after {
+    content: none;
   }
 
   .vault-brief .vault-article blockquote,

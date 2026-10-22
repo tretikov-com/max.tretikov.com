@@ -24,7 +24,7 @@ import {
 } from "./model.js";
 import { navigateTo } from "../navigation.js";
 import { configuredSources } from "./sources.js";
-import { waitForPrintAssets } from "./print.js";
+import { installPrintLinkHandling, waitForPrintAssets } from "./print.js";
 import { renderCharts } from "./charts.js";
 import HtmlDocument from "./HtmlDocument.jsx";
 import { renderHtmlPreviews } from "./html-document.js";
@@ -755,6 +755,8 @@ function VaultReader({
   const [prepared, setPrepared] = useState({ html: null, error: null });
   const [printing, setPrinting] = useState(false);
   const [printError, setPrintError] = useState(null);
+
+  useEffect(() => installPrintLinkHandling(articleRef.current), [rendered.html]);
 
   useEffect(() => {
     const previousTitle = document.title;
