@@ -88,6 +88,8 @@ Private HTML is loaded through authenticated GitHub access and stays in the brow
 session. The document frame cannot read the site's saved login or parent page.
 An image linked to a vault HTML file displays the live HTML inside the note. Its
 original image remains the PDF/print fallback and stays visible if the HTML cannot load.
+HTML frames grow and shrink to fit their content, including viewport changes and
+expanded chart details, so the document scrolls with the page.
 
 To hide supporting files from navigation, add `hideFromTree` to the source descriptor:
 

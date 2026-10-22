@@ -2,6 +2,58 @@ import { projectHref, resolveVaultTarget } from "./model.js";
 import { assetObjectUrl } from "./github.js";
 
 export const HTML_DOCUMENT_SANDBOX = "allow-scripts allow-top-navigation-by-user-activation";
+const HTML_SIZE_MESSAGE = "vault:html-size";
+
+function reportHtmlSize(type) {
+  let pending;
+  let previousHeight;
+  const measure = () => {
+    cancelAnimationFrame(pending);
+    pending = requestAnimationFrame(() => {
+      const body = document.body;
+      const style = getComputedStyle(body);
+      const height = Math.ceil(body.getBoundingClientRect().height
+        + (parseFloat(style.marginTop) || 0) + (parseFloat(style.marginBottom) || 0));
+      if (height > 0 && height !== previousHeight) {
+        previousHeight = height;
+        parent.postMessage({ type, height }, "*");
+      }
+    });
+  };
+  new ResizeObserver(measure).observe(document.body);
+  addEventListener("resize", measure);
+  addEventListener("load", measure, { once: true });
+  addEventListener("message", (event) => {
+    if (event.source === parent && event.data?.type === `${type}:request`) {
+      previousHeight = undefined;
+      measure();
+    }
+  });
+  document.fonts.ready.then(measure);
+  measure();
+}
+
+export function fitHtmlDocument(frame) {
+  if (!frame) return () => {};
+  const view = frame.ownerDocument.defaultView;
+  const requestSize = () => frame.contentWindow?.postMessage({ type: `${HTML_SIZE_MESSAGE}:request` }, "*");
+  const resize = (event) => {
+    const data = event.data;
+    if (event.source !== frame.contentWindow || data?.type !== HTML_SIZE_MESSAGE
+      || typeof data.height !== "number" || !Number.isFinite(data.height) || data.height <= 0) return;
+    const style = view.getComputedStyle(frame);
+    const border = style.boxSizing === "border-box"
+      ? (parseFloat(style.borderTopWidth) || 0) + (parseFloat(style.borderBottomWidth) || 0) : 0;
+    frame.style.height = `${Math.ceil(data.height + border)}px`;
+  };
+  view.addEventListener("message", resize);
+  frame.addEventListener("load", requestSize);
+  requestSize();
+  return () => {
+    view.removeEventListener("message", resize);
+    frame.removeEventListener("load", requestSize);
+  };
+}
 
 export function prepareHtmlDocument(html, { file, snapshot, source, revision, origin }) {
   const document = new DOMParser().parseFromString(html, "text/html");
@@ -25,6 +77,9 @@ export function prepareHtmlDocument(html, { file, snapshot, source, revision, or
       link.href = new URL(`${projectHref(source, target.path, { revision })}${target.anchor ? `#${target.anchor}` : ""}`, origin).href;
     }
   }
+  const sizing = document.createElement("script");
+  sizing.textContent = `(${reportHtmlSize.toString()})(${JSON.stringify(HTML_SIZE_MESSAGE)});`;
+  document.body.append(sizing);
   return `<!doctype html>\n${document.documentElement.outerHTML}`;
 }
 
@@ -63,6 +118,7 @@ export async function renderHtmlPreviews(article, { file, snapshot, source, revi
       frame.setAttribute("referrerpolicy", "no-referrer");
       frame.title = link.querySelector("img").alt || asset.path;
       frame.srcdoc = html;
+      cleanups.push(fitHtmlDocument(frame));
       link.replaceWith(wrapper);
       wrapper.append(frame, link);
       cleanups.push(() => wrapper.replaceWith(link));

@@ -1,8 +1,11 @@
-import React, { useEffect, useState } from "react";
-import { HTML_DOCUMENT_SANDBOX, prepareHtmlDocument } from "./html-document.js";
+import React, { useEffect, useRef, useState } from "react";
+import { fitHtmlDocument, HTML_DOCUMENT_SANDBOX, prepareHtmlDocument } from "./html-document.js";
 
 export default function HtmlDocument({ file, revision, snapshot, source, url }) {
   const [document, setDocument] = useState({ url: null, html: null, error: null });
+  const frameRef = useRef(null);
+
+  useEffect(() => fitHtmlDocument(frameRef.current), [document.html, document.url, url]);
 
   useEffect(() => {
     if (!url) return undefined;
@@ -26,6 +29,7 @@ export default function HtmlDocument({ file, revision, snapshot, source, url }) 
   if (!url || document.url !== url || !document.html) return <p role="status">LOADING HTML DOCUMENT…</p>;
   return <iframe
     className="vault-html-document"
+    ref={frameRef}
     referrerPolicy="no-referrer"
     sandbox={HTML_DOCUMENT_SANDBOX}
     srcDoc={document.html}
