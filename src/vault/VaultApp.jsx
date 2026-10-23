@@ -750,6 +750,7 @@ function VaultReader({
   const articleRef = useRef(null);
   const repositoryName = source.repo || source.label;
   const rendered = useRenderedNote(file, repositoryName);
+  const isReadme = /(?:^|\/)readme\.(?:md|markdown|mdown)$/i.test(file.path);
   const documentKind = /(?:^|\/)readme\.md(?:own)?$/i.test(file.path)
     || file.path === snapshot.initialNote ? "Project Brief" : "Project Note";
   const [prepared, setPrepared] = useState({ html: null, error: null });
@@ -911,9 +912,18 @@ function VaultReader({
 
   if (!rendered.html) return <div className="vault-reader-loading">TRANSFORMING NOTE / QUARTZ OFM…</div>;
 
+  const masthead = <header className="vault-brief-masthead">
+    <strong>{source.label}</strong>
+    <div>
+      <span>{source.kind === "inline" ? source.label : `${source.owner}/${source.repo}`} / {file.repoPath || file.path}</span>
+      <span>REVISION / {formatCommit(snapshot.commitSha)}</span>
+    </div>
+    <span>MAX TRETIKOV / {documentKind.toUpperCase()}</span>
+  </header>;
+
   return <div
     className="vault-brief"
-    data-readme={/(?:^|\/)readme\.(?:md|markdown|mdown)$/i.test(file.path) || undefined}
+    data-readme={isReadme || undefined}
   >
     <DocumentMeta
       editDisabled={editDisabled}
@@ -936,14 +946,8 @@ function VaultReader({
     {(printError || prepared.error) && <p className="vault-print-error" role="alert">
       Could not prepare the document for printing. {(printError || prepared.error).message}
     </p>}
-    <header className="vault-brief-masthead">
-      <strong>{source.label}</strong>
-      <div>
-        <span>{source.kind === "inline" ? source.label : `${source.owner}/${source.repo}`} / {file.repoPath || file.path}</span>
-        <span>REVISION / {formatCommit(snapshot.commitSha)}</span>
-      </div>
-      <span>MAX TRETIKOV / {documentKind.toUpperCase()}</span>
-    </header>
+    {!isReadme && masthead}
+    {/* {isReadme && masthead} */}
     <article
       className="vault-article"
       dangerouslySetInnerHTML={{ __html: rendered.html }}

@@ -22,6 +22,11 @@
   margin: .65in;
 }
 
+@page project-readme {
+  size: Letter;
+  margin: .4in;
+}
+
 @media print {
   html[data-view="vault"],
   html[data-view="vault"] body,
@@ -268,31 +273,95 @@
     content-visibility: visible;
   }
 
-  .vault-brief[data-readme] .vault-brief-masthead {
-    gap: 4pt;
-    margin-bottom: 12pt;
-    padding-bottom: 8pt;
+  .vault-screen:has(.vault-brief[data-readme]) {
+    page: project-readme;
   }
 
   .vault-brief[data-readme] .vault-article {
     font-size: 10pt;
-    line-height: 1.35;
+    line-height: 1.3;
+    column-count: 2;
+    column-gap: 18pt;
+    column-fill: balance;
+  }
+
+  .vault-brief[data-readme] .vault-article > h1,
+  .vault-brief[data-readme] .vault-article .print-wide {
+    column-span: all;
   }
 
   .vault-brief[data-readme] .vault-article h1 {
-    margin-bottom: 10pt;
-  }
-
-  .vault-brief[data-readme] .vault-article h1::after {
-    margin-top: 6pt;
+    margin-bottom: 6pt;
   }
 
   .vault-brief[data-readme] .vault-article h2 {
-    margin: 12pt 0 6pt;
-    padding-top: 6pt;
+    margin: 12pt 0 5pt;
+    padding-top: 4pt;
+    font-size: 13.5pt;
+  }
+
+  .vault-brief[data-readme] .vault-article h3 {
+    margin: 10pt 0 4pt;
+    font-size: 11.5pt;
   }
 
   .vault-brief[data-readme] .vault-article p {
-    margin-bottom: 6pt;
+    margin: 0 0 6pt;
   }
+
+  .vault-brief[data-readme] .vault-article li {
+    margin: 0 0 2pt;
+  }
+
+  .vault-brief[data-readme] .vault-article ul {
+    margin: 6pt 0;
+    padding-left: 16pt;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-figure {
+    float: none;
+    width: 100%;
+    max-width: 100%;
+    margin: 10pt 0;
+    break-inside: avoid;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-figure p {
+    margin: 0;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-wide > p + p {
+    margin-top: 10pt;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-figure img {
+    width: auto;
+    max-width: 100%;
+    max-height: 1.25in;
+    margin: 0 auto;
+    border-radius: 0;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-figure p:has(> em:only-child) {
+    margin-top: 3pt;
+    font-size: 8.5pt;
+    line-height: 1.2;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-wide img {
+    max-height: 1.6in;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-reader img {
+    max-height: 1.6in;
+  }
+
+  .vault-brief[data-readme] .vault-article .print-funding img {
+    max-height: 1.1in;
+  }
+
+  .vault-brief[data-readme] .vault-article > :last-child {
+    margin-bottom: 0;
+  }
+
 }
