@@ -47,12 +47,14 @@ export async function buildAccessManifest(input) {
     const id = await usernameKey(username);
     requireValue(!Object.hasOwn(users, id), "usernames must be unique.");
     requireValue(typeof user.password === "string" && user.password.length >= 16, "passwords must contain at least 16 characters; use randomly generated passwords.");
-    requireValue(typeof user.author?.name === "string" && user.author.name.trim() && !/[\r\n]/.test(user.author.name), "each user needs an author name.");
-    requireValue(typeof user.author?.email === "string" && /^[^\s@]+@[^\s@]+$/.test(user.author.email), "each user needs an author email.");
+    if (user.author !== undefined) {
+      requireValue(typeof user.author?.name === "string" && user.author.name.trim() && !/[\r\n]/.test(user.author.name), "author must include a name.");
+      requireValue(typeof user.author?.email === "string" && /^[^\s@]+@[^\s@]+$/.test(user.author.email), "author must include an email.");
+    }
     requireValue(Array.isArray(user.projects) && user.projects.every((id) => projects.has(id)), "each user's projects must reference configured project IDs.");
     users[id] = await encryptAccess(username, user.password, {
       username,
-      author: { name: user.author.name.trim(), email: user.author.email },
+      ...(user.author ? { author: { name: user.author.name.trim(), email: user.author.email } } : {}),
       token: config.token.trim(),
       ...(config.acceptanceToken ? { acceptanceToken: config.acceptanceToken.trim() } : {}),
       projects: [...new Set(user.projects)].map((id) => projects.get(id)),

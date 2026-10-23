@@ -5,7 +5,7 @@ import SessionAccount from "./SessionAccount.jsx";
 import { unlockAccess } from "./credentials.js";
 import { NDA_ACTION_LABEL, recordNdaAcceptance } from "./acceptance.js";
 import { NDA_DOCUMENT } from "./nda-document.js";
-import { forgetLogin, readSavedLogin, rememberLogin, restoreLogin } from "./session.js";
+import { completeLoginIdentity, forgetLogin, readSavedLogin, rememberLogin, restoreLogin } from "./session.js";
 import "./secret.css";
 
 let activeSession = null;
@@ -32,6 +32,7 @@ export default function SecretApp({ route }) {
   const [manifest, setManifest] = useState(null);
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [identity, setIdentity] = useState(null);
   const [busy, setBusy] = useState(false);
   const [restoring, setRestoring] = useState(() => !activeSession && Boolean(readSavedLogin()));
   const [error, setError] = useState(null);
@@ -75,16 +76,23 @@ export default function SecretApp({ route }) {
     setBusy(true);
     setError(null);
     try {
-      const access = await unlockAccess(manifest, username, password);
+      const invitation = await unlockAccess(manifest, username, password);
+      if (!invitation.author && identity?.username !== invitation.username) {
+        setIdentity({ username: invitation.username, name: "", email: "" });
+        return;
+      }
+      const access = completeLoginIdentity(invitation, identity);
+      if (!access) throw new Error("Enter your full name and a valid email address.");
       try {
         await recordNdaAcceptance(access, NDA_DOCUMENT, { origin: window.location.origin });
       } catch (failure) {
         throw new Error(`Your NDA acceptance could not be saved, so sign-in has not completed. Please retry or contact Max. ${failure.message}`);
       }
-      rememberLogin(access.username, password);
+      rememberLogin({ username: access.username, password, author: access.author });
       activeSession = startSession(access);
       setSession(activeSession);
       setPassword("");
+      setIdentity(null);
     } catch (failure) { setError(failure); }
     finally { setBusy(false); }
   };
@@ -119,8 +127,13 @@ export default function SecretApp({ route }) {
       </section>
       <form className="secret-login" onSubmit={signIn}>
         <p className="vault-eyebrow">COLLABORATOR ACCESS</p>
-        <label>USERNAME<input autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => setUsername(event.target.value)} required disabled={busy} /></label>
+        <label>USERNAME<input autoComplete="username" autoCapitalize="none" spellCheck={false} value={username} onChange={(event) => { setUsername(event.target.value); setIdentity(null); }} required disabled={busy} /></label>
         <label>PASSWORD<input type="password" autoComplete="current-password" value={password} onChange={(event) => setPassword(event.target.value)} required disabled={busy} /></label>
+        {identity && <>
+          <p className="secret-login-detail" role="status">Before signing in, add your full name and email for your NDA acceptance and contributions.</p>
+          <label>FULL NAME<input autoComplete="name" value={identity.name} onChange={(event) => setIdentity({ ...identity, name: event.target.value })} required disabled={busy} autoFocus /></label>
+          <label>EMAIL<input type="email" autoComplete="email" autoCapitalize="none" spellCheck={false} value={identity.email} onChange={(event) => setIdentity({ ...identity, email: event.target.value })} required disabled={busy} /></label>
+        </>}
         <p className="secret-login-detail">Use the credentials Max shared with you. This browser keeps you signed in until you sign out.</p>
         {error && <p className="secret-error" role="alert">{error.message}</p>}
         {!manifest && !error && <p role="status">Loading access…</p>}

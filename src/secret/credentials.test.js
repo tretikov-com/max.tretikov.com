@@ -46,6 +46,20 @@ test("configuration errors fail the build without echoing input credentials", as
   assert.deepEqual(await buildAccessManifest(""), { version: 1, users: {} });
 });
 
+test("invitations can omit author details for completion at first sign-in", async () => {
+  const input = structuredClone(config);
+  delete input.users[0].author;
+  const manifest = await buildAccessManifest(JSON.stringify(input));
+  const access = await unlockAccess(manifest, "ada", input.users[0].password);
+  assert.equal(access.author, undefined);
+  assert.equal(access.token, input.token);
+  assert.deepEqual(access.projects.map(project => project.id), ["research"]);
+  for (const author of [null, {}, { name: "Ada" }, { name: "Ada", email: "invalid" }]) {
+    input.users[0].author = author;
+    await assert.rejects(buildAccessManifest(JSON.stringify(input)), /author must include/);
+  }
+});
+
 test("private source visibility settings survive encrypted access without excluding files", async () => {
   const input = structuredClone(config);
   input.projects[0].hideFromTree = { paths: ["figures"], extensions: [".svg", ".png"] };

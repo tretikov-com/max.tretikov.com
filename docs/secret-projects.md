@@ -67,7 +67,10 @@ after changing the access configuration.
 Generate a unique random password for each person, for example with
 `openssl rand -base64 24`. Passwords must have at least 16 characters. Usernames
 are case-insensitive. Share the username and password privately with the intended
-collaborator, and ensure their configured name and email identify that person.
+collaborator. The `author` object is optional: omit it if you do not know their
+name or email. After their credentials are validated, the sign-in form asks them
+to supply both before recording NDA acceptance or opening any projects. If you
+configure `author`, include both their name and email.
 
 The agreement's cover terms identify Max and that individual as the parties,
 set confidentiality to three years per disclosure (with continuing trade-secret
@@ -89,8 +92,9 @@ if its policy requires approval. The receipt repository must have an initialized
 `main` branch. If all repositories share an owner and the primary token includes
 the receipt repository, omit `acceptanceToken`.
 
-Each invitation has its own username, password, name, email, and assigned project
-list. All invitations unlock the same shared GitHub credentials, encrypted
+Each invitation has its own username, password, and assigned project list. Name
+and email come from its configured `author` or from the collaborator at sign-in.
+All invitations unlock the same shared GitHub credentials, encrypted
 separately with each invitation's password. GitHub operations run as the token
 owner.
 
@@ -111,9 +115,9 @@ changes. Keep the variable name exactly as shown: `VITE_` variables are public.
 
 Sign in at `/projects/secret`. Only assigned projects appear. Notes, attachments,
 links, and commit history use authenticated requests to `api.github.com`.
-The browser saves the username and password in localStorage after successful
-sign-in and receipt recording. Reloading or reopening the browser automatically
-unlocks the latest access configuration with those credentials. Private notes and
+The browser saves the username, password, and contributor name and email in
+localStorage after successful sign-in and receipt recording. Reloading or reopening
+the browser automatically unlocks the latest access configuration with those credentials. Private notes and
 GitHub tokens remain in page memory, with no private-content IndexedDB or
 localStorage cache. Sign out to clear the saved login and in-memory session and
 abort pending repository requests. If browser storage is unavailable, sign-in
@@ -132,7 +136,7 @@ are read-only.
 
 GitHub records the shared token owner as the commit author and PR opener.
 Project-edit and receipt commit messages include the signed-in collaborator's
-configured name, email, and username, for example:
+name, email, and username, for example:
 
 ```text
 Update Research/Idea.md
@@ -147,7 +151,7 @@ PR before creating one. Once merged, changes appear on the next branch refresh.
 ## Acceptance records
 
 Receipts live at `acceptances/<account-sha256>/<agreement-sha256>.json`. Each
-contains the configured username, name, and email; the exact Markdown agreement
+contains the username, name, and email; the exact Markdown agreement
 and its version and SHA-256 hash; the notice and button text; a browser timestamp;
 and the site origin. Tokens, passwords, and project lists are not included.
 
@@ -161,7 +165,7 @@ timestamp. The `clientAcceptedAt` value inside the JSON is supplied by the brows
 The site remains entirely static. A person with decrypted credentials can bypass
 the UI's logging step. Anyone holding a token with Contents write access to the
 receipt repository can read, alter, or delete receipts through GitHub, and the
-configured author identity is not independently verified. These records are an
+contributor identity is not independently verified. These records are an
 audit aid rather than an immutable signing service.
 
 ## Access and revocation

@@ -22,16 +22,29 @@ export function readSavedLogin(storage = browserStorage()) {
   return null;
 }
 
-export function rememberLogin(username, password, storage = browserStorage()) {
+export function completeLoginIdentity(access, author) {
+  const identity = access.author || author;
+  const name = typeof identity?.name === "string" ? identity.name.trim() : "";
+  const email = typeof identity?.email === "string" ? identity.email.trim() : "";
+  if (!name || /[\r\n]/.test(name) || !/^[^\s@]+@[^\s@]+$/.test(email)) return null;
+  return { ...access, author: { name, email } };
+}
+
+export function rememberLogin({ username, password, author }, storage = browserStorage()) {
   try {
-    storage?.setItem(STORAGE_KEY, JSON.stringify({ username: canonicalUsername(username), password }));
+    storage?.setItem(STORAGE_KEY, JSON.stringify({ username: canonicalUsername(username), password, author }));
   } catch { /* Sign-in can still succeed when browser storage is unavailable. */ }
 }
 
 export async function restoreLogin(manifest, storage = browserStorage()) {
   const login = readSavedLogin(storage);
   if (!login) return null;
-  try { return await unlockAccess(manifest, login.username, login.password); }
+  try {
+    const access = completeLoginIdentity(await unlockAccess(manifest, login.username, login.password), login.author);
+    if (access) return access;
+    forgetLogin(storage);
+    return null;
+  }
   catch {
     forgetLogin(storage);
     return null;
