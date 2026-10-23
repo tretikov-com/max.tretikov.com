@@ -114,9 +114,26 @@
   .vault-brief .vault-article h4,
   .vault-brief .vault-article h5,
   .vault-brief .vault-article h6 {
+    page-break-after: avoid;
+    -webkit-column-break-after: avoid;
     break-after: avoid;
     break-inside: avoid;
     line-height: 1.2;
+  }
+
+  /* Editor helper nodes can prevent the heading's break rule reaching its wrapper. */
+  .vault-brief .vault-article :is(div, section):has(> :is(h1, h2, h3, h4, h5, h6)):not(:has(> :is(p, ul, ol, blockquote, pre, table))) {
+    page-break-after: avoid;
+    -webkit-column-break-after: avoid;
+    break-after: avoid;
+    break-inside: avoid;
+  }
+
+  .vault-brief .vault-article :is(h1, h2, h3, h4, h5, h6) + *,
+  .vault-brief .vault-article :is(div, section):has(> :is(h1, h2, h3, h4, h5, h6)):not(:has(> :is(p, ul, ol, blockquote, pre, table))) + * {
+    page-break-before: avoid;
+    -webkit-column-break-before: avoid;
+    break-before: avoid;
   }
 
   .vault-brief .vault-article h1 {
