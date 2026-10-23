@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import SiteHeader from "../SiteHeader.jsx";
 import resumeSource from "./resume.toml?raw";
 import { linkedTextSegments, parseResumeToml } from "./model.js";
 import "./resume.css";
@@ -83,11 +84,7 @@ export default function ResumeApp() {
   const phoneHref = `tel:${resume.contact.phone.replace(/[^+\d]/g, "")}`;
 
   return <div className="resume-page">
-    <nav className="resume-toolbar" aria-label="Résumé controls">
-      <a className="resume-home-link" href="/">
-        <span aria-hidden="true">[</span> MAX TRETIKOV <span aria-hidden="true">]</span>
-      </a>
-      <span className="resume-toolbar-label" aria-hidden="true">DOCUMENT / RÉSUMÉ</span>
+    <SiteHeader actions={
       <a
         className="resume-pdf-link"
         href="/Maksim-Tretikov-Resume.pdf"
@@ -97,7 +94,7 @@ export default function ResumeApp() {
       >
         EXPORT PDF <span aria-hidden="true">↗</span>
       </a>
-    </nav>
+    } />
 
     <main>
       <article className="resume-document" aria-labelledby="resume-name">

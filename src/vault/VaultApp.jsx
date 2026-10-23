@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import SiteHeader from "../SiteHeader.jsx";
 import "katex/dist/katex.min.css";
 import "./vault.css";
 import { readFileHistory, saveFileHistory } from "./cache.js";
@@ -61,24 +62,15 @@ function sourceMetadata(source) {
 }
 
 function ProjectsHeader({ account, detail, privateProjects = false, status }) {
-  return <header className="vault-header">
-    <a className="vault-wordmark" href="/" aria-label="Return to Max Tretikov home">
-      <span className="vault-wordmark-bracket">[</span>
-      <span>MAX TRETIKOV</span>
-      <span className="vault-wordmark-bracket">]</span>
-    </a>
-    <div className="vault-header-context">
-      <nav className="vault-breadcrumb" aria-label="Project navigation">
-        <a href={privateProjects ? "/projects/secret" : "/projects"}>{privateProjects ? "SECRET PROJECTS" : "PROJECTS"}</a>
-        {detail && <><span aria-hidden="true">/</span><span>{detail}</span></>}
-      </nav>
-      <div className="vault-header-rule" aria-hidden="true" />
-      {status && <span className={`vault-status vault-status--${status.tone || "idle"}`}>
-        <i aria-hidden="true" />{status.label}
-      </span>}
-    </div>
-    {account}
-  </header>;
+  return <SiteHeader actions={account}>
+    <nav className="vault-breadcrumb" aria-label="Project navigation">
+      <a href={privateProjects ? "/projects/secret" : "/projects"}>{privateProjects ? "SECRET PROJECTS" : "PROJECTS"}</a>
+      {detail && <><span aria-hidden="true">/</span><span>{detail}</span></>}
+    </nav>
+    {status && <span className={`vault-status vault-status--${status.tone || "idle"}`}>
+      <i aria-hidden="true" />{status.label}
+    </span>}
+  </SiteHeader>;
 }
 
 function EmptyProjects({ privateProjects = false }) {

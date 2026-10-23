@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import SiteHeader from "../SiteHeader.jsx";
 import Giscus from "@giscus/react";
 import "katex/dist/katex.min.css";
 import snapshot from "./posts.json";
@@ -87,10 +88,7 @@ export default function BlogApp({ route }) {
 
   return <div className="blog-page">
     <a className="blog-skip" href="#blog-main">Skip to content</a>
-    <header className="blog-toolbar">
-      <a className="blog-wordmark" href="/"><span>[</span> MAX TRETIKOV <span>]</span></a>
-      <nav aria-label="Site navigation"><a href="/projects">PROJECTS</a><a href="/resume">RÉSUMÉ</a><a href="/blog" aria-current="page">BLOG</a></nav>
-    </header>
+    <SiteHeader />
     {isIndex ? <BurstIndex posts={posts} /> : post ? <BlogPost post={post} /> : <main className="blog-not-found" id="blog-main">
       <h1>Post not found.</h1><p>This post may have moved or is no longer published.</p><a href="/blog">← ALL POSTS</a>
     </main>}

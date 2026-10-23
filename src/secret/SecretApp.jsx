@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import SiteHeader from "../SiteHeader.jsx";
 import VaultApp from "../vault/VaultApp.jsx";
 import SessionAccount from "./SessionAccount.jsx";
 import { unlockAccess } from "./credentials.js";
@@ -100,15 +101,16 @@ export default function SecretApp({ route }) {
     }} />}
   />;
 
-  if (restoring) return <div className="route-loading" role="status">RESTORING SESSION…</div>;
+  if (restoring) return <div className="vault-screen secret-screen">
+    <SiteHeader />
+    <div className="route-loading" role="status">RESTORING SESSION…</div>
+  </div>;
 
   const configured = manifest && Object.keys(manifest.users).length > 0;
   return <div className="vault-screen secret-screen">
-    <header className="vault-header">
-      <a className="vault-wordmark" href="/">[ MAX TRETIKOV ]</a>
-      <div className="vault-header-rule" aria-hidden="true" />
+    <SiteHeader actions={
       <a className="vault-secondary-action" href="/projects">PUBLIC PROJECTS ↗</a>
-    </header>
+    } />
     <main className="secret-entry">
       <section className="secret-entry-intro">
         <h1>SECRET<br />PROJECTS</h1>

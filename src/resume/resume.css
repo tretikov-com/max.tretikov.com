@@ -24,38 +24,6 @@ body[data-view="resume"] #root {
   box-sizing: border-box;
 }
 
-.resume-toolbar {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  min-height: 54px;
-  padding: 7px clamp(18px, 3vw, 44px);
-  border-bottom: 1px solid #d8d3df;
-  background: var(--wedge);
-  font-family: "Space Mono", monospace;
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: .11em;
-}
-
-.resume-home-link {
-  justify-self: start;
-  color: var(--wedge-ink);
-  text-decoration: none;
-}
-
-.resume-home-link span {
-  color: var(--accent);
-}
-
-.resume-toolbar-label {
-  color: #746c7d;
-  font-size: 8px;
-}
-
 .resume-pdf-link {
   display: inline-flex;
   align-items: center;
@@ -79,7 +47,6 @@ body[data-view="resume"] #root {
   color: #fff;
 }
 
-.resume-home-link:focus-visible,
 .resume-pdf-link:focus-visible,
 .resume-document a:focus-visible {
   outline: 3px solid var(--accent);
@@ -317,21 +284,12 @@ body[data-view="resume"] #root {
 }
 
 .resume-entry-description a:hover,
-.resume-contact a:hover,
-.resume-home-link:hover {
+.resume-contact a:hover {
   color: #362b42;
   text-decoration-color: var(--accent);
 }
 
 @media (max-width: 700px) {
-  .resume-toolbar {
-    grid-template-columns: 1fr auto;
-  }
-
-  .resume-toolbar-label {
-    display: none;
-  }
-
   .resume-document {
     padding-top: 48px;
   }
@@ -360,12 +318,6 @@ body[data-view="resume"] #root {
 @media (max-width: 520px) {
   .resume-page {
     font-size: 14px;
-  }
-
-  .resume-toolbar {
-    min-height: 58px;
-    padding-inline: 14px;
-    letter-spacing: .065em;
   }
 
   .resume-pdf-link {
@@ -463,10 +415,6 @@ body[data-view="resume"] #root {
     line-height: 1.38;
     print-color-adjust: exact;
     -webkit-print-color-adjust: exact;
-  }
-
-  .resume-toolbar {
-    display: none;
   }
 
   .resume-document {

@@ -47,7 +47,6 @@
     -webkit-print-color-adjust: exact;
   }
 
-  .vault-screen:has(.vault-brief) .vault-header,
   .vault-screen:has(.vault-brief) .vault-sidebar,
   .vault-screen:has(.vault-brief) .vault-warning,
   .vault-brief .vault-document-meta,

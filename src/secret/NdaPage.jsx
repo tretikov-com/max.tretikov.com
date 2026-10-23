@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import SiteHeader from "../SiteHeader.jsx";
 import { NDA_DOCUMENT } from "./nda-document.js";
 import "../vault/vault.css";
 import "./nda.css";
@@ -25,11 +26,9 @@ export default function NdaPage() {
   }, []);
 
   return <div className="vault-screen nda-screen">
-    <header className="vault-header">
-      <a className="vault-wordmark" href="/">[ MAX TRETIKOV ]</a>
-      <div className="vault-header-rule" aria-hidden="true" />
+    <SiteHeader actions={
       <a className="vault-secondary-action" href="/projects/secret">BACK TO SIGN IN →</a>
-    </header>
+    } />
     <main className="nda-content">
       {!rendered.html && !rendered.error && <p role="status">Loading agreement…</p>}
       {rendered.error && <p role="alert">The agreement could not be displayed. Please reload before signing in.</p>}

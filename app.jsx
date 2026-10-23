@@ -11,6 +11,7 @@
    Landscape and portrait get distinct compositions. */
 import React from "react";
 import { createRoot } from "react-dom/client";
+import SiteHeader from "./src/SiteHeader.jsx";
 import { PALETTE as PAL } from "./palette.js";
 import {
   migrateLegacyRoute,
@@ -35,19 +36,6 @@ const fx2 = (n) => n.toFixed(1);
 const FACETS = [
   [0.62, 0.00], [0.31, 0.18], [0.31, 0.38],
   [0.54, 0.55], [0.54, 0.70], [0.76, 0.85], [1.00, 1.00],
-];
-
-const NAV_ITEMS = [
-  { label: "PROJECTS", href: "/projects" },
-  { label: "RESUME", href: "/resume" },
-  { label: "BLOG", href: "/blog" },
-  // { label: "PAPERS", href: "/papers" },
-  { label: "PROFILES", href: "/profiles" },
-];
-
-const PROFILE_LINKS = [
-  { label: "GITHUB", href: "https://github.com/MaxTretikov" },
-  { label: "LINKEDIN", href: "https://www.linkedin.com/in/maxtretikov" },
 ];
 
 // intersection of line a→b with line c→d (used to miter offset segments)
@@ -100,24 +88,6 @@ function seamXAtY(P, y) {
     }
   }
   return P[P.length - 1][0];
-}
-
-// Greedily wrap navigation items to fit the open field.
-function packNav(items, avail, charW, separatorSpan) {
-  const lines = [[]];
-  let width = 0;
-  for (const item of items) {
-    const itemWidth = item.label.length * charW;
-    const nextWidth = width ? width + separatorSpan + itemWidth : itemWidth;
-    if (width && nextWidth > avail) {
-      lines.push([item]);
-      width = itemWidth;
-    } else {
-      lines[lines.length - 1].push(item);
-      width = nextWidth;
-    }
-  }
-  return lines;
 }
 
 function readViewport() {
@@ -201,15 +171,9 @@ function buildScene(W, H) {
     depth = bandH;
   }
 
-  const avail = Math.max(W - titleX - m, 120);
   const navCharW = sSize * 0.60 + sLS;
   const navSeparatorMargin = sSize * 0.65;
   const navSeparatorSpan = navSeparatorMargin * 2 + sSize * 0.60;
-  // Mobile navigation is intentionally arranged as a compact two-line index.
-  const navLines = portrait
-    ? [NAV_ITEMS.slice(0, 2), NAV_ITEMS.slice(2)]
-    : packNav(NAV_ITEMS, avail, navCharW, navSeparatorSpan);
-
   const bioSize = clamp(chromeSize * 1.55, 15, 25);
   const bioPad = bioSize * 0.5;
   const bioWidth = 15 * (bioSize * 0.60 + chromeLS) + bioPad * 2;
@@ -224,7 +188,7 @@ function buildScene(W, H) {
     markerY: titleBaseY - tSize * 2.0,
     nameY: titleBaseY,
     subY: titleBaseY + tSize * 1.35,
-    navLines, navCharW, navSeparatorSpan, navSeparatorMargin, faint, bioChrome,
+    navCharW, navSeparatorSpan, navSeparatorMargin, faint, bioChrome,
   };
 }
 
@@ -233,33 +197,12 @@ function Cross({ x, y, s, c, w }) {
   return <path d={`M${fx2(x - s / 2)},${fx2(y)} h${fx2(s)} M${fx2(x)},${fx2(y - s / 2)} v${fx2(s)}`} stroke={c} strokeWidth={w || 2} />;
 }
 
-function profileMenuMetrics(scene) {
-  const fontSize = clamp(scene.sSize * 1.02, 14, 18);
-  const width = scene.portrait
-    ? clamp(scene.W - scene.m * 2 - 24, 286, 328)
-    : clamp(fontSize * 24, 350, 420);
-  return {
-    fontSize,
-    width,
-    height: width * (236 / 420) * (scene.portrait ? 1.06 : 1),
-  };
-}
-
 function Frame() {
   const { w: W, h: H } = useViewport();
   const scene = useMemo(() => buildScene(W, H), [W, H]);
   const svgRef = useRef(null);
   const [navActive, setNavActive] = useState(false);
-  const [profileMenu, setProfileMenu] = useState(null);
-
-  useEffect(() => {
-    if (!profileMenu) return undefined;
-    const closeOnEscape = (event) => {
-      if (event.key === "Escape") setProfileMenu(null);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [profileMenu]);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
 
   // relief band — imperative per-frame so resizes never thrash React
   useEffect(() => {
@@ -307,7 +250,7 @@ function Frame() {
 
   return (
     <div id="stage">
-      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" onClick={() => setProfileMenu(null)}>
+      <svg ref={svgRef} viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
         <defs>
           <pattern id="dots" width="15" height="15" patternUnits="userSpaceOnUse">
             <circle cx="1" cy="1" r="0.7" fill={PAL.wedgeDot} />
@@ -364,7 +307,7 @@ function Frame() {
 
         {/* bottom-left vertical text + ticks */}
         <g>
-          <g className="edge-meta" opacity={profileMenu && s.portrait ? 0 : 1}>
+          <g className="edge-meta" opacity={profileMenuOpen && s.portrait ? 0 : 1}>
             <text x={s.m} y={H * (s.portrait ? 0.43 : 0.32)} fontSize={fx2(s.chromeSize * 0.62)} letterSpacing={fx2(s.chromeLS)} fill={leftInk}
               transform={`rotate(90 ${s.m} ${H * (s.portrait ? 0.43 : 0.32)})`}>GENE CIRCUIT SYSTEMS ▪ UNIT 01 ▪ REV {__GIT_REVISION__} Δ +{__GIT_ADDITIONS__} -{__GIT_DELETIONS__}</text>
             <g fill={leftInk}>
@@ -387,91 +330,7 @@ function Frame() {
           </g>
         </g>
 
-        {/* title block — marker ▪|||▪ + name + subtitle */}
-        <g transform={`translate(${fx2(s.titleX)} 0)`}>
-          <g transform={`translate(0 ${fx2(s.markerY)})`}>
-            <rect x="0" y="0" width="14" height="7" fill={PAL.ink} />
-            <rect x="20" y="-1" width="2" height="9" fill={PAL.accentMid} />
-            <rect x="27" y="-1" width="2" height="9" fill={PAL.accentMid} />
-            <rect x="34" y="-1" width="2" height="9" fill={PAL.accentMid} />
-            <rect x="54" y="0" width="11" height="7" fill={PAL.accent} />
-          </g>
-          {(() => {
-            const titleUnit = s.tSize * 0.62 + s.tLS;
-            const maksWidth = 6 * titleUnit;
-            const maxWidth = 3 * titleUnit;
-            const bracketGap = s.tSize * 0.70;
-            const bracketLeft = maksWidth + bracketGap;
-            const maxX = bracketLeft + bracketGap + 3;
-            const bracketRight = maxX + maxWidth + bracketGap + 3;
-            const tretikovX = bracketRight + bracketGap + 3;
-            const bracketTop = s.nameY - s.tSize * 0.82;
-            const bracketBottom = s.nameY + s.tSize * 0.13;
-            return <>
-              <text className="title" x="0" y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600" letterSpacing={fx2(s.tLS)} fill={PAL.ink}>MAKSIM</text>
-              <path d={`M${fx2(bracketLeft + 5)},${fx2(bracketTop)} H${fx2(bracketLeft)} V${fx2(bracketBottom)} H${fx2(bracketLeft + 5)} M${fx2(bracketRight - 5)},${fx2(bracketTop)} H${fx2(bracketRight)} V${fx2(bracketBottom)} H${fx2(bracketRight - 5)}`} fill="none" stroke={PAL.ink} strokeWidth={fx2(Math.max(1.5, s.tSize * 0.085))} strokeLinecap="square" strokeLinejoin="miter" />
-              <text className="title" x={fx2(maxX)} y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600" letterSpacing={fx2(s.tLS)} fill={PAL.ink}>MAX</text>
-              <text className="title" x={fx2(tretikovX)} y={s.nameY} fontSize={fx2(s.tSize)} fontWeight="600" letterSpacing={fx2(s.tLS)} fill={PAL.ink}>TRETIKOV</text>
-            </>;
-          })()}
-          {s.navLines.map((line, lineIndex) => {
-            let x = 0;
-            const y = s.subY + lineIndex * s.sSize * 1.35;
-            return line.map((item, itemIndex) => {
-              const currentX = x;
-              x += item.label.length * s.navCharW;
-              const separator = itemIndex < line.length - 1 || (s.portrait && lineIndex === 0 && itemIndex === line.length - 1);
-              const slashX = x + s.navSeparatorMargin + s.sSize * 0.045;
-              if (separator) x += s.navSeparatorSpan;
-              return (
-                <React.Fragment key={item.label}>
-                  <a href={item.href} className="nav-link" onPointerEnter={() => setNavActive(true)} onPointerLeave={() => setNavActive(false)} onFocus={() => setNavActive(true)} onBlur={() => setNavActive(false)} onClick={item.label === "PROFILES" ? (event) => {
-                    event.preventDefault();
-                    event.stopPropagation();
-                    if (profileMenu) { setProfileMenu(null); return; }
-                    const metrics = profileMenuMetrics(s);
-                    const anchorX = s.titleX + currentX - metrics.width * 0.075;
-                    const anchorY = y + s.sSize * 1.25;
-                    setNavActive(false);
-                    setProfileMenu({
-                      x: clamp(anchorX, s.m, W - metrics.width - s.m),
-                      y: clamp(anchorY, s.m, H - metrics.height - s.m),
-                    });
-                  } : undefined} tabIndex="0" aria-haspopup={item.label === "PROFILES" ? "menu" : undefined} aria-controls={item.label === "PROFILES" ? "profile-links-menu" : undefined} aria-expanded={item.label === "PROFILES" ? Boolean(profileMenu) : undefined}>
-                    <text x={fx2(currentX)} y={fx2(y)} fontSize={fx2(s.sSize)} letterSpacing={fx2(s.sLS)} fill={PAL.inkDim}>{item.label}</text>
-                  </a>
-                  {separator && <text x={fx2(slashX)} y={fx2(y)} fontSize={fx2(s.sSize)} letterSpacing="0" fill={PAL.inkDim}>/</text>}
-                </React.Fragment>
-              );
-            });
-          })}
-          {profileMenu && (() => {
-            const metrics = profileMenuMetrics(s);
-            const sx = metrics.width / 420;
-            const sy = metrics.height / 236;
-            return <g id="profile-links-menu" className="profile-menu" role="menu" aria-label="External profiles" transform={`translate(${fx2(profileMenu.x - s.titleX)} ${fx2(profileMenu.y)})`} onClick={(event) => event.stopPropagation()}>
-              <image href="/profile-menu.svg?v=8" x="0" y="0" width={fx2(metrics.width)} height={fx2(metrics.height)} preserveAspectRatio="none" />
-              <g className="profile-menu-meta" fill={PAL.inkDim}>
-                <text x={fx2(80  * sx)} y={fx2(55 * sy)} fontSize={fx2(metrics.fontSize * 0.56)} letterSpacing={fx2(metrics.fontSize * 0.15)}>NET://PROFILE INDEX</text>
-                <text x={fx2(300 * sx)} y={fx2(50 * sy)} fontSize={fx2(metrics.fontSize * 0.48)} letterSpacing={fx2(metrics.fontSize * 0.08)}>β LINKS</text>
-              </g>
-              {PROFILE_LINKS.map((profile, profileIndex) => (
-                <a className="profile-link" role="menuitem" tabIndex="0" key={profile.label} href={profile.href} target="_blank" rel="noopener noreferrer">
-                  <path className="profile-link-hit" d={profileIndex === 0
-                    ? `M${fx2(63 * sx)},${fx2(73 * sy)} H${fx2(383 * sx)} L${fx2(402 * sx)},${fx2(92 * sy)} V${fx2(123 * sy)} H${fx2(81 * sx)} L${fx2(63 * sx)},${fx2(105 * sy)} Z`
-                    : `M${fx2(63 * sx)},${fx2(135 * sy)} H${fx2(381 * sx)} L${fx2(397 * sx)},${fx2(151 * sy)} V${fx2(181 * sy)} L${fx2(383 * sx)},${fx2(195 * sy)} H${fx2(63 * sx)} Z`} />
-                  <text className="profile-link-index" x={fx2(82 * sx)} y={fx2((105 + profileIndex * 62) * sy)} fontSize={fx2(metrics.fontSize * 0.58)} letterSpacing={fx2(metrics.fontSize * 0.10)}>0{profileIndex + 1}</text>
-                  <text className="profile-link-label" x={fx2(118 * sx)} y={fx2((107 + profileIndex * 62) * sy)} fontSize={fx2(metrics.fontSize)} letterSpacing={fx2(metrics.fontSize * 0.13)}>{profile.label}</text>
-                  <path className="profile-link-arrow" d={`M${fx2(358 * sx)},${fx2((98 + profileIndex * 62) * sy)} h${fx2(16 * sx)} m${fx2(-6 * sx)},${fx2(-6 * sy)} l${fx2(6 * sx)},${fx2(6 * sy)} l${fx2(-6 * sx)},${fx2(6 * sy)}`} />
-                </a>
-              ))}
-              <text className="profile-menu-footer" fontSize={fx2(metrics.fontSize * 0.52)} letterSpacing={fx2(metrics.fontSize * 0.06)}>
-                <tspan x={fx2(75 * sx)} y={fx2(207 * sy)}>EXT.LINK</tspan>
-                <tspan x={fx2(75 * sx)} y={fx2(220 * sy)}>SELECT</tspan>
-              </text>
-            </g>;
-          })()}
-        </g>
+        <SiteHeader scene={s} onNavActive={setNavActive} onProfilesChange={setProfileMenuOpen} />
       </svg>
     </div>
   );
