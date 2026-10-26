@@ -49,8 +49,15 @@ existing branch. `root` is the directory to display and edit; use `""` for the
 repository root. Repository details and author information are encrypted along
 with the token. The public project index uses `src/vault/sources.js` independently.
 
-To hide RfNA's supporting figures from the file browser, add this field to its
-project object in `SECRET_PROJECT_ACCESS`:
+Store images, figures, HTML charts, and supporting files in `.assets/` inside the
+project's configured `root` (`docs/.assets/` when `root` is `"docs"`). The site's
+file browser automatically hides `.assets/` folders at any depth for every
+project. Files remain loaded for embeds, chart transclusions, direct links, and
+PDF printing. No access configuration change is needed; keep the files tracked
+in Git and out of `exclude`.
+
+To hide another folder, add this field to its project object in
+`SECRET_PROJECT_ACCESS`:
 
 ```json
 "hideFromTree": { "paths": ["figures"] }

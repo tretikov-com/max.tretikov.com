@@ -72,17 +72,19 @@ test("extension filters hide matching files case-insensitively and omit empty fo
   assert.equal(buildVaultTree(files).fileCount, files.length);
 });
 
-for (const directory of ["print", ".print"]) {
-  test(`${directory}/ fallback directories stay hidden while their assets remain resolvable`, () => {
+for (const directory of [".assets", "print", ".print"]) {
+  test(`${directory}/ supporting directories stay hidden while their contents remain resolvable`, () => {
     const snapshot = createSnapshot({ id: "research" }, "revision", [
       { path: "README.md", type: "markdown" },
       { path: `${directory}/preview.svg`, type: "asset" },
       { path: `${directory}/preview.png`, type: "asset" },
+      { path: `${directory}/interactive.html`, type: "asset" },
+      { path: `${directory}/chart.md`, type: "markdown", content: "Chart data" },
       { path: `notes/${directory}/figure.svg`, type: "asset" },
       { path: "notes/guide.md", type: "markdown" },
       { path: `${directory}-notes.md`, type: "markdown" },
     ]);
-    assert.equal(snapshot.files.length, 6);
+    assert.equal(snapshot.files.length, 8);
     assert.equal(snapshot.tree.fileCount, 3);
     assert.deepEqual(snapshot.tree.children.map((node) => node.name), ["notes", `${directory}-notes.md`, "README.md"]);
     assert.deepEqual(snapshot.tree.children[0].children.map((node) => node.name), ["guide.md"]);
@@ -90,6 +92,8 @@ for (const directory of ["print", ".print"]) {
     assert.equal(resolveAssetTarget(`${directory}/preview.svg`, "README.md", paths), `${directory}/preview.svg`);
     assert.equal(resolveAssetTarget(`${directory}/figure.svg`, "notes/guide.md", paths), `notes/${directory}/figure.svg`);
     assert.deepEqual(resolveVaultTarget(`${directory}/preview.png`, "README.md", paths), { path: `${directory}/preview.png`, anchor: "" });
+    assert.deepEqual(resolveVaultTarget(`${directory}/interactive.html`, "README.md", paths), { path: `${directory}/interactive.html`, anchor: "" });
+    assert.deepEqual(resolveNoteTarget(`${directory}/chart#^plot`, "README.md", paths), { path: `${directory}/chart.md`, anchor: "^plot" });
   });
 }
 

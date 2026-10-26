@@ -101,9 +101,19 @@ caption in a `print-figure` div; add `print-wide` to span both columns,
 `print-reader` for a larger reader rendering, or `print-funding` for a compact
 budget summary. Other project notes retain their
 existing print layout.
-Store static SVG/PNG fallbacks in `print/` folders for Obsidian compatibility. These
-folders, and existing `.print/` folders, stay out of navigation by default while
-remaining available to embeds, direct links and historical snapshots.
+Store project images, figures, HTML charts, and supporting files in `.assets/`
+inside the configured source `root`: `docs/.assets/` for a `docs` source, or
+`.assets/` for a repository-root source. Organize it with subfolders as needed,
+and reference files normally, for example `![Figure](.assets/figures/diagram.svg)`
+from a note at the source root. Every public and secret project hides `.assets/`
+folders at any depth from its file browser automatically. Their contents stay
+available to embeds, chart transclusions, direct links, printing, and historical
+snapshots, including already cached revisions. No source or access configuration
+is needed. Keep these assets tracked in Git and out of `exclude`.
+
+Static SVG/PNG print fallbacks can also live in `print/` folders for Obsidian
+compatibility. `print/` and `.print/` folders stay out of navigation by default
+while remaining available to embeds, direct links and historical snapshots.
 
 To hide supporting files from navigation, add `hideFromTree` to the source descriptor:
 
