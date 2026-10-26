@@ -101,15 +101,18 @@ caption in a `print-figure` div; add `print-wide` to span both columns,
 `print-reader` for a larger reader rendering, or `print-funding` for a compact
 budget summary. Other project notes retain their
 existing print layout.
-Store project images, figures, HTML charts, and supporting files in `.assets/`
-inside the configured source `root`: `docs/.assets/` for a `docs` source, or
-`.assets/` for a repository-root source. Organize it with subfolders as needed,
-and reference files normally, for example `![Figure](.assets/figures/diagram.svg)`
-from a note at the source root. Every public and secret project hides `.assets/`
+Store project images, figures, HTML charts, and supporting files in `assets/`
+inside the configured source `root`: `docs/assets/` for a `docs` source, or
+`assets/` for a repository-root source. Organize it with subfolders as needed,
+and reference files normally, for example `![Figure](assets/figures/diagram.svg)`
+from a note at the source root. Every public and secret project hides `assets/`
 folders at any depth from its file browser automatically. Their contents stay
 available to embeds, chart transclusions, direct links, printing, and historical
 snapshots, including already cached revisions. No source or access configuration
 is needed. Keep these assets tracked in Git and out of `exclude`.
+
+The site also hides `.assets/`. Use `assets/` in Obsidian vaults so Obsidian can
+index attachments and resolve chart transclusions.
 
 Static SVG/PNG print fallbacks can also live in `print/` folders for Obsidian
 compatibility. `print/` and `.print/` folders stay out of navigation by default

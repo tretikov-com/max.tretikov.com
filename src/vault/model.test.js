@@ -72,7 +72,7 @@ test("extension filters hide matching files case-insensitively and omit empty fo
   assert.equal(buildVaultTree(files).fileCount, files.length);
 });
 
-for (const directory of [".assets", "print", ".print"]) {
+for (const directory of ["assets", ".assets", "print", ".print"]) {
   test(`${directory}/ supporting directories stay hidden while their contents remain resolvable`, () => {
     const snapshot = createSnapshot({ id: "research" }, "revision", [
       { path: "README.md", type: "markdown" },
